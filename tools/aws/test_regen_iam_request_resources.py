@@ -1595,3 +1595,25 @@ def test_promoted_vpc_operations_read_vpc_ids_and_stored_tag_keys():
     assert r.resource_tag_keys([{"Name": "ec2", "Resources": [{"Name": "vpc", "ConditionKeys": [
         "aws:ResourceTag/${TagKey}", "ec2:ResourceTag/${TagKey}", "ec2:Region"]}]}]) == {
             "ec2": {"vpc": ["aws:ResourceTag/", "ec2:ResourceTag/"]}}
+
+
+@pytest.mark.parametrize("operation,kind,variable", [
+    ("CreateSubnet", "subnet", "SubnetId"),
+    ("CreateRouteTable", "route-table", "RouteTableId"),
+    ("CreateSecurityGroup", "security-group", "SecurityGroupId"),
+    ("CreateInternetGateway", "internet-gateway", "InternetGatewayId"),
+])
+def test_network_creates_authorize_new_resource_and_existing_vpc(operation, kind, variable):
+    has_parent = operation != "CreateInternetGateway"
+    members = {"VpcId": "String"} if has_parent else {}
+    ec2 = model({operation: members}, "ec2")
+    formats = {kind: f"arn:${{Partition}}:ec2:${{Region}}:${{Account}}:{kind}/${{{variable}}}",
+               "vpc": "arn:${Partition}:ec2:${Region}:${Account}:vpc/${VpcId}"}
+    types = [kind, "vpc"] if has_parent else [kind]
+    entry = r.entry_for(f"ec2:{operation}", {"action": f"ec2:{operation}", "types": types},
+                        formats, {"ec2": ec2})
+    expected = [{"type": kind, "fill": {}}]
+    if has_parent:
+        expected[0]["made"] = True
+        expected.append({"type": "vpc", "fill": {"VpcId": "VpcId"}})
+    assert entry["resources"] == expected
