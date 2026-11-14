@@ -426,7 +426,13 @@ KNOWN_VARIABLES = {"Partition", "Region", "Account"}
 # name, the Service Reference the action's types and ARN formats, and botocore's documentation and examples the id
 # prefix of each type (`id_prefixes`). Other ids keep a wildcard entry until their coverage grows; every request
 # without those lists is read by the ordinary rules.
-ID_TARGETS = {"ec2": ("instance", "network-acl", "network-interface", "route-table", "security-group")}
+ID_TARGETS = {"ec2": ("instance", "network-acl", "network-interface", "route-table", "security-group",
+                      "vpc-peering-connection")}
+# Explicit AWS examples only where the pinned botocore has no id example. These supply an id discriminator,
+# never an operation's resource types or ARN format: those still come from the Service Reference and model.
+# botocore 1.43.118 has no peering examples. AWS's CLI output names "VpcPeeringConnectionId": "pcx-111aaa111".
+DOCUMENTED_ID_EXAMPLES = {"ec2": {"vpc-peering-connection": (
+    "pcx-111aaa111", "https://docs.aws.amazon.com/cli/latest/reference/ec2/create-vpc-peering-connection.html#examples")}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
@@ -1762,7 +1768,20 @@ def id_prefixes(models: dict[str, dict], kinds: tuple[str, ...],
 def namespace_id_prefixes(namespace: str, models: dict[str, dict],
                           examples: dict[str, dict] | None = None) -> dict[str, str] | None:
     """`id_prefixes` of the types `ID_TARGETS` reads by id in the namespace; None for a namespace it reads none of."""
-    return id_prefixes(models, ID_TARGETS[namespace], examples) if namespace in ID_TARGETS else None
+    if namespace not in ID_TARGETS:
+        return None
+    prefixes = id_prefixes(models, ID_TARGETS[namespace], examples)
+    for kind, (example, source) in DOCUMENTED_ID_EXAMPLES.get(namespace, {}).items():
+        if kind not in ID_TARGETS[namespace]:
+            continue
+        matched = EXAMPLE_ID_RE.fullmatch(example)
+        if not matched or not source.startswith("https://docs.aws.amazon.com/"):
+            raise ValueError(f"{namespace}:{kind} needs a cited AWS id example")
+        prefix = matched.group(1)
+        if kind in prefixes and prefixes[kind] != prefix:
+            raise ValueError(f"{namespace}:{kind} has conflicting botocore and documented id prefixes")
+        prefixes.setdefault(kind, prefix)
+    return prefixes
 
 
 def id_targets(operation: str, types: list[str], formats: dict[str, str], models: dict[str, dict],

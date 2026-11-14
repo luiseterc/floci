@@ -1869,3 +1869,14 @@ def test_eip_operations_read_scalar_targets_from_models(operation, members, kind
     action = "ec2:" + operation
     entry = r.entry_for(action, {"action": action, "types": kinds}, formats, {"ec2": ec2})
     assert entry["resources"] == [{"type": kind, "fill": {variables[kind]: variables[kind]}} for kind in kinds]
+
+
+def test_documented_peering_id_fills_the_pinned_botocore_gap():
+    assert r.namespace_id_prefixes("ec2", {}) == {"vpc-peering-connection": "pcx-"}
+    assert r.namespace_id_prefixes("unread", {}) is None
+
+
+def test_documented_id_conflict_with_new_model_data_requires_review(monkeypatch):
+    monkeypatch.setattr(r, "id_prefixes", lambda *args: {"vpc-peering-connection": "changed-"})
+    with pytest.raises(ValueError, match="conflicting"):
+        r.namespace_id_prefixes("ec2", {})

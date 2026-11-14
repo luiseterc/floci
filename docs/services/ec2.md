@@ -1736,3 +1736,11 @@ Under `none` the rule still runs, but a mock instance has only the Elastic IP, i
 Otherwise a mock instance's address appears whether DescribeInstances or DescribeInstanceStatus
 observes the launch first. A terminated mock instance has no public address, and stopping it does not bring it
 back.
+
+### VPC peering tag authorization
+
+`CreateTags` and `DeleteTags` resolve `pcx-` IDs to VPC peering connection ARNs for
+resource-scoped IAM policies. Request-tag, resource-tag and explicit-deny conditions
+apply to the caller's side of the connection. Tags remain local to that account and
+Region, as described in the
+[VPC peering basics](https://docs.aws.amazon.com/vpc/latest/peering/vpc-peering-basics.html).
