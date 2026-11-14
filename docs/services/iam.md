@@ -2738,6 +2738,10 @@ set to `CreateVpc`. Explicit denies on these resources still apply. The resource
 is generated from the Service Reference and botocore; other EC2 operations remain staged
 as described below.
 
+`ec2:ModifyVpcAttribute` resolves the supplied `VpcId` to its ARN and checks the target's
+current stored tags under `aws:ResourceTag/` and `ec2:ResourceTag/`. Tags are read for each
+resolved ARN independently; request tags do not replace ownership tags on an existing VPC.
+
 EC2 tagging targets come from `regen_iam_request_resources.py`, with EC2 among its namespaces.
 The Service Reference supplies the resource types and ARN formats, botocore supplies the
 `Resources` list and its EC2 Query spelling (`ResourceId.N`), and a documented generator

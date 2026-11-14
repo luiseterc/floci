@@ -454,7 +454,9 @@ KNOWN_VARIABLES = {"Partition", "Region", "Account"}
 # share this reader and its generated condition contexts; requests without those lists stay unchanged.
 ID_TARGETS = {"ec2": {"member": "Resources", "prefixes": {"instance": "i-"}}}
 # Operations promoted from the staged namespace to the ordinary, metadata-derived resource rules.
-READ_IN_ID_TARGETS = {"ec2:CreateVpc"}
+READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute"}
+# Stored tags read by ARN for promoted scalar targets, separately from instance lists.
+READ_RESOURCE_TAGS = {"ec2": {"vpc"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
@@ -522,7 +524,7 @@ def resource_tag_keys(documents: list[dict]) -> dict[str, dict[str, list[str]]]:
     result = {}
     for document in documents:
         namespace = document["Name"]
-        supported = ID_TARGETS.get(namespace, {}).get("prefixes", {})
+        supported = set(ID_TARGETS.get(namespace, {}).get("prefixes", {})) | READ_RESOURCE_TAGS.get(namespace, set())
         types = {resource["Name"]: sorted(key.removesuffix("${TagKey}")
                  for key in resource.get("ConditionKeys", []) if key.endswith(":ResourceTag/${TagKey}"))
                  for resource in document.get("Resources", []) if resource["Name"] in supported}

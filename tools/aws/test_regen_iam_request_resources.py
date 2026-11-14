@@ -1585,3 +1585,13 @@ def test_a_resource_id_variable_takes_a_member_named_so_and_a_bare_id_the_member
     # A bare `Id` is whatever the operation is about: the tenant's is its `DistributionTenantId`.
     assert r._filling("Id", "distributiontenant", 1, {"Id": "Id", "DistributionTenantId": "DistributionTenantId"},
                       {"Id"}) == "DistributionTenantId"
+
+
+def test_promoted_vpc_operations_read_vpc_ids_and_stored_tag_keys():
+    ec2 = model({"ModifyVpcAttribute": {"VpcId": "String"}}, "ec2")
+    formats = {"vpc": "arn:${Partition}:ec2:${Region}:${Account}:vpc/${VpcId}"}
+    assert r.entry_for("ec2:ModifyVpcAttribute", {"action": "ec2:ModifyVpcAttribute", "types": ["vpc"]},
+                       formats, {"ec2": ec2})["resources"] == [{"type": "vpc", "fill": {"VpcId": "VpcId"}}]
+    assert r.resource_tag_keys([{"Name": "ec2", "Resources": [{"Name": "vpc", "ConditionKeys": [
+        "aws:ResourceTag/${TagKey}", "ec2:ResourceTag/${TagKey}", "ec2:Region"]}]}]) == {
+            "ec2": {"vpc": ["aws:ResourceTag/", "ec2:ResourceTag/"]}}
