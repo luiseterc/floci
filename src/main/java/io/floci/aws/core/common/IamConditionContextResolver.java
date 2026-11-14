@@ -11,6 +11,7 @@ import io.floci.aws.services.dynamodb.DynamoDbConditionKeys;
 import io.floci.aws.services.dynamodb.DynamoDbFacade;
 import io.floci.aws.services.dynamodb.DynamoDbTableNames;
 import io.floci.aws.services.dynamodb.model.TableDefinition;
+import io.floci.aws.services.ec2.Ec2PeeringConditions;
 import io.floci.aws.services.ec2.Ec2Service;
 import io.floci.aws.services.ec2.model.Tag;
 import io.floci.aws.services.iam.IamActionRegistry;
@@ -833,6 +834,11 @@ public class IamConditionContextResolver {
         RequestResourceMembers.Targets targets = RequestResourceMembers.table().targets().get(action);
         Map<String, List<String>> conditions = new LinkedHashMap<>();
         Map<String, String> form = formParameters(ctx);
+        if (Ec2PeeringConditions.supports(action) && ec2Service.isResolvable()) {
+            String region = requestContext.getRegion() == null ? config.defaultRegion() : requestContext.getRegion();
+            String account = requestContext.getAccountId() == null ? config.defaultAccountId() : requestContext.getAccountId();
+            conditions.putAll(Ec2PeeringConditions.resolve(action, form, region, account, ec2Service.get()));
+        }
         if ("ec2:CreateTags".equals(action)) {
             addRequestTags(conditions, form, "Tag.");
         }
@@ -979,7 +985,7 @@ public class IamConditionContextResolver {
      * resource this context describes is the resource the handler acts on.
      */
     @SuppressWarnings("unchecked")
-    static Map<String, String> formParameters(ContainerRequestContext ctx) {
+    public static Map<String, String> formParameters(ContainerRequestContext ctx) {
         if ("GET".equalsIgnoreCase(ctx.getMethod()) && IamActionRegistry.isQueryRequest(ctx)) {
             Map<String, String> parameters = new LinkedHashMap<>();
             ctx.getUriInfo().getQueryParameters().forEach((key, values) -> {

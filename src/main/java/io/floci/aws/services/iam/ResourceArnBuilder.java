@@ -7,6 +7,7 @@ import io.floci.aws.core.common.AwsArnUtils;
 import io.floci.aws.core.common.AwsException;
 import io.floci.aws.core.common.AwsQueryServiceResolver;
 import io.floci.aws.core.common.AwsRegions;
+import io.floci.aws.core.common.IamConditionContextResolver;
 import io.floci.aws.core.common.RequestResources;
 import io.floci.aws.core.common.ServicePrincipals;
 import io.floci.aws.core.common.SigV4CredentialScope;
@@ -15,6 +16,9 @@ import io.floci.aws.core.common.auth.SigV4Canonicalization;
 import io.floci.aws.services.cloudwatch.logs.CloudWatchLogsCrossAccountService;
 import io.floci.aws.services.cloudwatch.logs.CloudWatchLogsDeliveryService;
 import io.floci.aws.services.cloudwatch.logs.LogGroupTagTarget;
+import io.floci.aws.services.ec2.Ec2PeeringConditions;
+import io.floci.aws.services.ec2.Ec2Service;
+import io.floci.aws.services.ec2.model.VpcPeeringConnection;
 import io.floci.aws.services.eks.EksController;
 import io.floci.aws.services.eks.EksService;
 import io.floci.aws.services.kms.KmsService;
@@ -114,6 +118,7 @@ public class ResourceArnBuilder {
      * request, as in a unit test, where the request URI's raw path stands in.
      */
     private final CurrentVertxRequest currentVertxRequest;
+    private final Instance<Ec2Service> ec2Service;
 
     @Inject
     public ResourceArnBuilder(ObjectMapper objectMapper, Instance<IamService> iamService,
@@ -122,7 +127,9 @@ public class ResourceArnBuilder {
                               Instance<EksService> eksService,
                               Instance<KmsService> kmsService,
                               Instance<StoredResourceArns> storedResourceArns,
-                              CurrentVertxRequest currentVertxRequest) {
+                              CurrentVertxRequest currentVertxRequest,
+                              Instance<Ec2Service> ec2Service) {
+        this.ec2Service = ec2Service;
         this.objectMapper = objectMapper;
         this.iamService = iamService;
         this.secretsManagerService = secretsManagerService;
@@ -131,6 +138,16 @@ public class ResourceArnBuilder {
         this.kmsService = kmsService;
         this.storedResourceArns = storedResourceArns;
         this.currentVertxRequest = currentVertxRequest;
+    }
+
+    public ResourceArnBuilder(ObjectMapper objectMapper, Instance<IamService> iamService,
+                              Instance<SecretsManagerService> secretsManagerService,
+                              Instance<LambdaMicrovmsService> microvmsService,
+                              Instance<EksService> eksService, Instance<KmsService> kmsService,
+                              Instance<StoredResourceArns> storedResourceArns,
+                              CurrentVertxRequest currentVertxRequest) {
+        this(objectMapper, iamService, secretsManagerService, microvmsService, eksService, kmsService,
+                storedResourceArns, currentVertxRequest, null);
     }
 
     public ResourceArnBuilder(ObjectMapper objectMapper, Instance<IamService> iamService,
@@ -251,6 +268,14 @@ public class ResourceArnBuilder {
         List<String> named = operation == null || !operation.startsWith(credentialScope + ":") ? List.of()
                 : RequestResources.of(operation, ctx, partition, region, accountId, storedResourceArns(credentialScope),
                         IamActionRegistry.pathLabels(credentialScope, ctx));
+        if ("ec2:AcceptVpcPeeringConnection".equals(operation) && ec2Service != null && ec2Service.isResolvable()) {
+            String id = IamConditionContextResolver.formParameters(ctx).get("VpcPeeringConnectionId");
+            VpcPeeringConnection connection = Ec2PeeringConditions.find(id, region, ec2Service.get());
+            if (connection != null && connection.getAccepterVpcInfo() != null) {
+                named = new ArrayList<>(named);
+                named.add(Ec2PeeringConditions.vpcArn(connection.getAccepterVpcInfo()));
+            }
+        }
         return named.isEmpty() ? List.of("*") : named;
     }
 

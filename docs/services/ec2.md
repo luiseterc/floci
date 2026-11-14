@@ -1736,3 +1736,11 @@ Under `none` the rule still runs, but a mock instance has only the Elastic IP, i
 Otherwise a mock instance's address appears whether DescribeInstances or DescribeInstanceStatus
 observes the launch first. A terminated mock instance has no public address, and stopping it does not bring it
 back.
+
+### VPC peering IAM conditions
+
+Peering creation and lifecycle operations expose `ec2:RequesterVpc` and
+`ec2:AccepterVpc` using each VPC's own account and region. Creation resolves a
+locally stored peer's owner before applying conditions; later operations read the
+connection visible to the caller. Acceptance also checks permission on the
+accepter VPC, including its resource tags, separately from the connection.
