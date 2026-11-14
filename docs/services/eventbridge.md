@@ -424,6 +424,15 @@ aws events put-targets \
 
 ## Event Bus Policies under IAM Enforcement
 
+Rule configuration populates `events:source` from literal strings in
+`PutRule.EventPattern.source`, and `events:TargetArn` from every
+`PutTargets.Targets[].Arn`. These values participate in multi-value and explicit
+deny conditions without replacing rule ARN authorization. Missing source arrays
+remain absent; arrays containing event-pattern matcher objects do not supply a
+literal source context. Use a `Null: false` check with `ForAllValues` when the key
+must be present. This extraction is limited to rule configuration, not
+`PutEvents` or EventBridge V2 event-source configuration.
+
 With `floci.services.iam.enforcement-enabled` on, a bus's policy takes part in the decision as IAM's
 policy evaluation logic describes. `PutPermission` with a `Principal` account id adds a statement
 naming that account's root, `{"AWS": "arn:aws:iam::<account>:root"}`, and `*` stays `*`. Within one

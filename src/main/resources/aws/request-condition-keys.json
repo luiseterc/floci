@@ -11,6 +11,12 @@
       "ec2-instance-connect:privateIpAddress",
       "ec2-instance-connect:remotePort"
     ],
+    "events:PutRule": [
+      "events:source"
+    ],
+    "events:PutTargets": [
+      "events:TargetArn"
+    ],
     "lambda:CreateWebFunction": [
       "lambda:Request/WebFunctionAuthType"
     ],
@@ -47,6 +53,17 @@
       ],
       "ec2-instance-connect:remotePort": [
         "remotePort"
+      ]
+    },
+    "events:PutRule": {
+      "events:source": [
+        "EventPattern"
+      ]
+    },
+    "events:PutTargets": {
+      "events:TargetArn": [
+        "Targets.*.Arn",
+        "Targets.*.DeadLetterConfig.Arn"
       ]
     },
     "lambda:CreateWebFunction": {

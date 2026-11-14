@@ -64,6 +64,15 @@ FLAT_PROTOCOLS = ("query", "ec2")
 # carries it, each key read from the stored resource, and the actions that take a key their request does not
 # carry, with the reason.
 SERVICES = {
+    "events": {
+        "model": "events",
+        "request": {"events:source": "EventPattern", "events:TargetArn": "Arn"},
+        "stored": (),
+        "not_in_request": {},
+        # This extractor covers rule configuration. PutEvents and EventBridge V2
+        # derive source from different request shapes and are not implemented here.
+        "action_scope": {"PutRule", "PutTargets"},
+    },
     "lambda": {
         "model": "lambda-web",
         "request": {"lambda:Request/WebFunctionAuthType": "authType"},
@@ -102,6 +111,8 @@ def action_keys(namespace: str, reference: dict) -> dict[str, list[str]]:
     resource_keys = _resource_keys([reference])
     found = {}
     for action in sorted(reference["Actions"], key=lambda entry: entry["Name"]):
+        if service.get("action_scope") and action["Name"] not in service["action_scope"]:
+            continue
         keys = read & _condition_keys(namespace, action, resource_keys)
         if keys:
             found[f"{namespace}:{action['Name']}"] = sorted(keys)

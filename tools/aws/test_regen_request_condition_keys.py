@@ -7,6 +7,26 @@ import pytest
 from regen_request_condition_keys import OUTPUT, action_keys, request_members, validate
 
 
+def test_eventbridge_rule_scope_and_nested_target_members():
+    reference = {"Actions": [
+        {"Name": "PutRule", "ActionConditionKeys": ["events:source"]},
+        {"Name": "PutTargets", "ActionConditionKeys": ["events:TargetArn"]},
+        {"Name": "PutEvents", "ActionConditionKeys": ["events:source"]},
+        {"Name": "CreateEventSource", "ActionConditionKeys": ["events:source"]}], "Resources": []}
+    actions = action_keys("events", reference)
+    assert actions == {"events:PutRule": ["events:source"], "events:PutTargets": ["events:TargetArn"]}
+    model = {"metadata": {"protocol": "json"}, "operations": {
+        "PutRule": {"input": {"shape": "Rule"}}, "PutTargets": {"input": {"shape": "Targets"}}}, "shapes": {
+        "Rule": {"members": {"EventPattern": {"shape": "String"}}},
+        "Targets": {"members": {"Targets": {"shape": "TargetList"}}},
+        "TargetList": {"type": "list", "member": {"shape": "Target"}},
+        "Target": {"members": {"Arn": {"shape": "String"}, "RoleArn": {"shape": "String"}}},
+        "String": {"type": "string"}}}
+    assert request_members("events", model, actions) == {
+        "events:PutRule": {"events:source": ["EventPattern"]},
+        "events:PutTargets": {"events:TargetArn": ["Targets.*.Arn"]}}
+
+
 def test_resource_and_action_keys_are_combined():
     reference = {"Name": "lambda", "Resources": [{"Name": "webFunctionEndpoint",
                                                   "ConditionKeys": ["lambda:Resource/WebFunctionAuthType"]}],

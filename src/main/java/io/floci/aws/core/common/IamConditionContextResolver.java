@@ -1,6 +1,8 @@
 package io.floci.aws.core.common;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.floci.aws.config.EmulatorConfig;
 import io.floci.aws.services.cloudwatch.logs.CloudWatchLogsCrossAccountService;
@@ -51,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.StreamSupport;
 
 /**
  * Builds the IAM request context: the condition keys a policy's Condition block can match,
@@ -70,6 +73,7 @@ import java.util.function.Function;
 public class IamConditionContextResolver {
 
     private static final Logger LOG = Logger.getLogger(IamConditionContextResolver.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /** Set by {@code ResourceArnBuilder.readJsonBody}, which runs earlier in the same filter pass. */
     static final String BUFFERED_JSON_BODY = "floci.bufferedJsonBody";
@@ -164,10 +168,51 @@ public class IamConditionContextResolver {
             case "iam" -> iamConditionContext(action, ctx);
             case "logs" -> logsConditionContext(action, ctx);
             case "lambda" -> lambdaConditionContext(action, ctx);
+            case "events" -> eventBridgeConditionContext(action, ctx);
             case "redshift" -> RequestConditionKeys.requestKeys(action).isEmpty() ? null
                     : requestConditions(action, formParameters(ctx)::get);
             default -> null;
         };
+    }
+
+    private Map<String, List<String>> eventBridgeConditionContext(String action, ContainerRequestContext ctx) {
+        if (RequestConditionKeys.requestKeys(action).isEmpty()) {
+            return null;
+        }
+        JsonNode body = PassedRoles.jsonBody(ctx);
+        Map<String, List<String>> conditions = new LinkedHashMap<>();
+        for (String key : RequestConditionKeys.requestKeys(action)) {
+            List<String> values = new ArrayList<>();
+            for (String member : RequestConditionKeys.members(action, key)) {
+                for (String value : PassedRoles.values(body, member.replace("*", "[]").split("\\."))) {
+                    if ("events:source".equals(key)) {
+                        try {
+                            JsonNode pattern = MAPPER.readTree(value);
+                            if (pattern == null) {
+                                continue;
+                            }
+                            JsonNode sources = pattern.path("source");
+                            if (!sources.isArray() || sources.isEmpty()) {
+                                continue;
+                            }
+                            // Source restrictions are literal strings. Never discard a matcher
+                            // from a mixed array and accidentally authorize only its literal part.
+                            if (StreamSupport.stream(sources.spliterator(), false).allMatch(JsonNode::isTextual)) {
+                                sources.forEach(source -> values.add(source.textValue()));
+                            }
+                        } catch (JsonProcessingException ignored) {
+                            // Invalid event patterns have no literal source context; the handler validates them.
+                        }
+                    } else {
+                        values.add(value);
+                    }
+                }
+            }
+            if (!values.isEmpty()) {
+                conditions.put(key, List.copyOf(values));
+            }
+        }
+        return conditions.isEmpty() ? null : conditions;
     }
 
     /** Logs tag operations and group mutations use the handler's resource and request scope. */
