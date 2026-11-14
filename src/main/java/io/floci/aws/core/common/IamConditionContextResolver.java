@@ -185,7 +185,11 @@ public class IamConditionContextResolver {
         if (secretsManagerService.isResolvable()) {
             secretsManagerService.get().storedSecretTags(resource).forEach((key, value) -> {
                 for (String prefix : prefixes) {
-                    result.put(prefix + key, List.of(value));
+                    String contextKey = prefix + key;
+                    String existingKey = result.keySet().stream()
+                            .filter(candidate -> candidate.equalsIgnoreCase(contextKey))
+                            .findFirst().orElse(contextKey);
+                    result.computeIfAbsent(existingKey, ignored -> new ArrayList<>()).add(value);
                 }
             });
         }

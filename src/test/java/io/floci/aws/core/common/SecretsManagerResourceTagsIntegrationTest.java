@@ -79,6 +79,36 @@ class SecretsManagerResourceTagsIntegrationTest {
         }
     }
 
+    @ParameterizedTest
+    @CsvSource({"aws,false", "aws,true", "secretsmanager,false", "secretsmanager,true"})
+    void caseVariantTagsCannotHideAnExplicitDeny(String prefix, boolean reverse) {
+        String name = "secret-tag-case-" + UUID.randomUUID();
+        UserCredentials credentials = EnforcementFixtures.createUser(cleanup, endpoint.getPort(),
+                auth(ACCOUNT, "iam"), name);
+        try (SecretsManagerClient admin = AwsTestClients.create(SecretsManagerClient.builder(), ACCOUNT,
+                Region.EU_WEST_1, endpoint);
+             SecretsManagerClient client = AwsTestClients.create(SecretsManagerClient.builder(),
+                     credentials.accessKeyId(), credentials.secretAccessKey(), Region.EU_WEST_1, endpoint)) {
+            Tag dev = Tag.builder().key("environment").value("dev").build();
+            Tag prod = Tag.builder().key("Environment").value("prod").build();
+            String arn = admin.createSecret(r -> r.name(name).secretString("value")
+                    .tags(reverse ? prod : dev, reverse ? dev : prod)).arn();
+            try {
+                policy(name, """
+                        {"Effect":"Allow","Action":"secretsmanager:GetSecretValue","Resource":"%s"},
+                        {"Effect":"Deny","Action":"secretsmanager:GetSecretValue","Resource":"%s",
+                        "Condition":{"ForAnyValue:StringEquals":{"%s:ResourceTag/Environment":"prod"}}}
+                        """.formatted(arn, arn, prefix));
+                denied(() -> client.getSecretValue(r -> r.secretId(name)));
+                denied(() -> client.getSecretValue(r -> r.secretId(arn)));
+                admin.untagResource(r -> r.secretId(arn).tagKeys("Environment"));
+                assertEquals("value", client.getSecretValue(r -> r.secretId(name)).secretString());
+            } finally {
+                admin.deleteSecret(r -> r.secretId(arn).forceDeleteWithoutRecovery(true));
+            }
+        }
+    }
+
     private void policy(String user, String statements) {
         EnforcementFixtures.putUserPolicy(endpoint.getPort(), auth(ACCOUNT, "iam"), user, "tags",
                 "{\"Version\":\"2012-10-17\",\"Statement\":[" + statements + "]}");

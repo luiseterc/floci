@@ -521,10 +521,16 @@ public class SecretsManagerService implements ResourceProvider {
     /** Current tags of the exact stored ARN, without reading a value or changing access timestamps. */
     public Map<String, String> storedSecretTags(String resourceArn) {
         AwsArnUtils.Arn arn = parseOrNull(resourceArn);
-        if (secretNameOrNull(arn) == null) {
+        String resourceName = secretNameOrNull(arn);
+        if (resourceName == null || resourceName.length() < 8
+                || resourceName.charAt(resourceName.length() - 7) != '-') {
             return Map.of();
         }
-        Secret secret = findByArnInAccount(resourceArn, arn);
+        String key = regionKey(arn.region(), resourceName.substring(0, resourceName.length() - 7));
+        Optional<Secret> stored = store instanceof AccountAwareStorageBackend<Secret> aware
+                ? aware.getForAccount(arn.accountId(), key).or(() -> aware.getLegacyForAccount(arn.accountId(), key))
+                : store.get(key);
+        Secret secret = stored.filter(candidate -> resourceArn.equals(candidate.getArn())).orElse(null);
         if (secret == null || secret.getTags() == null) {
             return Map.of();
         }
