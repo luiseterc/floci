@@ -2743,6 +2743,12 @@ both the new resource ARN and the existing parent VPC. `ec2:CreateInternetGatewa
 authorizes the new gateway ARN. Tag-on-create checks apply to the new resource only;
 the parent VPC uses its own stored ownership tags.
 
+The promoted network mutation operations include subnet attribute updates, route
+creation/replacement/deletion and association, gateway attachment/detachment,
+security-group ingress/egress changes, and VPC, subnet, route table, gateway, and
+security-group deletion. Each generated ARN is checked with that resource's own
+stored tags; allowing an owned VPC does not authorize an unowned gateway or subnet.
+
 `ec2:ModifyVpcAttribute` resolves the supplied `VpcId` to its ARN and checks the target's
 current stored tags under `aws:ResourceTag/` and `ec2:ResourceTag/`. Tags are read for each
 resolved ARN independently; request tags do not replace ownership tags on an existing VPC.

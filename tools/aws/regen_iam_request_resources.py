@@ -455,9 +455,15 @@ KNOWN_VARIABLES = {"Partition", "Region", "Account"}
 ID_TARGETS = {"ec2": {"member": "Resources", "prefixes": {"instance": "i-"}}}
 # Operations promoted from the staged namespace to the ordinary, metadata-derived resource rules.
 READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
-                      "ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateInternetGateway", "ec2:CreateSecurityGroup"}
+                      "ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateInternetGateway", "ec2:CreateSecurityGroup",
+                      "ec2:ModifySubnetAttribute", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway",
+                      "ec2:CreateRoute", "ec2:ReplaceRoute", "ec2:DeleteRoute", "ec2:AssociateRouteTable",
+                      "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
+                      "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
+                      "ec2:DeleteVpc", "ec2:DeleteSubnet", "ec2:DeleteRouteTable", "ec2:DeleteInternetGateway",
+                      "ec2:DeleteSecurityGroup"}
 # Stored tags read by ARN for promoted scalar targets, separately from instance lists.
-READ_RESOURCE_TAGS = {"ec2": {"vpc"}}
+READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
