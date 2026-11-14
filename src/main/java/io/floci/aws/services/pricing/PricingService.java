@@ -335,7 +335,11 @@ public class PricingService {
             JsonNode attrs = product.path("product").path("attributes");
             boolean match = true;
             for (FilterSpec filter : filters) {
-                JsonNode attrValue = attrs.path(filter.field());
+                JsonNode attrValue = switch (filter.field()) {
+                    case "productFamily" -> product.path("product").path("productFamily");
+                    case "serviceCode" -> attrs.path("servicecode");
+                    default -> attrs.path(filter.field());
+                };
                 if (attrValue.isMissingNode() || attrValue.isNull()
                         || !filter.value().equals(attrValue.asText())) {
                     match = false;

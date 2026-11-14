@@ -10,6 +10,11 @@ reply without modification. The bundled snapshot covers a minimal, representativ
 set of services and regions; for broader coverage, point Floci at your own
 snapshot with `FLOCI_SERVICES_PRICING_SNAPSHOT_PATH`.
 
+`GetProducts` filters read `productFamily` from the product metadata and map the
+`serviceCode` filter to the catalog's `servicecode` attribute. These filters combine
+with ordinary attribute filters; unknown fields and nonmatching values return no
+products. This does not expand the bundled snapshot's region or price coverage.
+
 ## Supported Operations
 
 | Operation | Notes |

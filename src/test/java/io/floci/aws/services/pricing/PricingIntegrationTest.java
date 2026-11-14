@@ -4,6 +4,8 @@ import io.floci.aws.testing.RestAssuredJsonUtils;
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -131,6 +133,37 @@ class PricingIntegrationTest {
             .body("PriceList", hasSize(1))
             .body("PriceList[0]", containsString("t3.micro"))
             .body("PriceList[0]", containsString("AmazonEC2"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"productFamily,Compute Instance,3", "serviceCode,AmazonEC2,3", "servicecode,AmazonEC2,3",
+            "productFamily,Storage,0", "serviceCode,AmazonS3,0", "unknown,AmazonEC2,0"})
+    void getProducts_matchesProductMetadataAndServiceCode(String field, String value, int count) {
+        given()
+            .contentType(CONTENT_TYPE)
+            .header("X-Amz-Target", "AWSPriceListService.GetProducts")
+            .header("Authorization", AUTH_HEADER)
+            .body("""
+                    {"ServiceCode":"AmazonEC2","Filters":[{"Type":"TERM_MATCH","Field":"%s","Value":"%s"}]}
+                    """.formatted(field, value))
+        .when().post("/")
+        .then().statusCode(200).body("PriceList", hasSize(count));
+    }
+
+    @Test
+    void getProducts_combinesMetadataAndAttributeFilters() {
+        given()
+            .contentType(CONTENT_TYPE)
+            .header("X-Amz-Target", "AWSPriceListService.GetProducts")
+            .header("Authorization", AUTH_HEADER)
+            .body("""
+                    {"ServiceCode":"AmazonEC2","Filters":[
+                        {"Type":"TERM_MATCH","Field":"productFamily","Value":"Compute Instance"},
+                        {"Type":"TERM_MATCH","Field":"serviceCode","Value":"AmazonEC2"},
+                        {"Type":"TERM_MATCH","Field":"instanceType","Value":"t3.micro"}]}
+                    """)
+        .when().post("/")
+        .then().statusCode(200).body("PriceList", hasSize(1)).body("PriceList[0]", containsString("t3.micro"));
     }
 
     @Test
