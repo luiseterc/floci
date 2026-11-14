@@ -143,3 +143,17 @@ def test_eks_cluster_request_members_and_create_only_bootstrap_key():
         key: paths for key, paths in create.items() if key != "eks:bootstrapClusterCreatorAdminPermissions"
     }
     assert "eks:DescribeCluster" not in document["actions"]
+
+
+def test_eks_access_identity_and_scope_distinguish_requests_from_stored_values():
+    document = json.loads(OUTPUT.read_text())
+    assert document["members"]["eks:CreateAccessEntry"] == {
+        "eks:accessEntryType": ["type"], "eks:principalArn": ["principalArn"]}
+    assert document["members"]["eks:AssociateAccessPolicy"] == {
+        "eks:accessScope": ["accessScope.type"], "eks:policyArn": ["policyArn"],
+        "eks:principalArn": ["principalArn"]}
+    assert document["members"]["eks:DisassociateAccessPolicy"] == {
+        "eks:policyArn": ["policyArn"], "eks:principalArn": ["principalArn"]}
+    assert "eks:accessEntryType" in document["actions"]["eks:DescribeAccessEntry"]
+    assert "eks:accessEntryType" not in document["members"]["eks:DescribeAccessEntry"]
+    assert "eks:accessScope" in document["actions"]["eks:DisassociateAccessPolicy"]

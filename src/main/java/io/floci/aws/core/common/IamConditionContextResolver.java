@@ -13,6 +13,7 @@ import io.floci.aws.services.dynamodb.DynamoDbTableNames;
 import io.floci.aws.services.dynamodb.model.TableDefinition;
 import io.floci.aws.services.ec2.Ec2Service;
 import io.floci.aws.services.ec2.model.Tag;
+import io.floci.aws.services.eks.EksService;
 import io.floci.aws.services.iam.IamActionRegistry;
 import io.floci.aws.services.iam.IamService;
 import io.floci.aws.services.iam.ResourceArnBuilder;
@@ -103,6 +104,7 @@ public class IamConditionContextResolver {
     private final Instance<CloudWatchLogsCrossAccountService> crossAccountService;
     private final Instance<IamService> iamService;
     private final Instance<LambdaWebService> lambdaWebService;
+    private final Instance<EksService> eksService;
     private final RequestContext requestContext;
     private final EmulatorConfig config;
     private final CurrentVertxRequest currentVertxRequest;
@@ -121,12 +123,13 @@ public class IamConditionContextResolver {
                                        Instance<CloudWatchLogsCrossAccountService> crossAccountService,
                                        Instance<IamService> iamService,
                                        Instance<LambdaWebService> lambdaWebService,
+                                Instance<EksService> eksService,
                                        RequestContext requestContext,
                                        EmulatorConfig config,
                                        CurrentVertxRequest currentVertxRequest,
                                        ResolvedServiceCatalog serviceCatalog) {
         this(dynamoDbFacade, ec2Service, s3Service, logsService, crossAccountService, iamService,
-                lambdaWebService, requestContext,
+                lambdaWebService, eksService, requestContext,
                 config, currentVertxRequest, serviceCatalog, Clock.systemUTC());
     }
 
@@ -137,6 +140,7 @@ public class IamConditionContextResolver {
                                 Instance<CloudWatchLogsCrossAccountService> crossAccountService,
                                 Instance<IamService> iamService,
                                 Instance<LambdaWebService> lambdaWebService,
+                                Instance<EksService> eksService,
                                 RequestContext requestContext,
                                 EmulatorConfig config,
                                 CurrentVertxRequest currentVertxRequest,
@@ -148,6 +152,7 @@ public class IamConditionContextResolver {
         this.crossAccountService = crossAccountService;
         this.iamService = iamService;
         this.lambdaWebService = lambdaWebService;
+        this.eksService = eksService;
         this.requestContext = requestContext;
         this.config = config;
         this.currentVertxRequest = currentVertxRequest;
@@ -176,11 +181,42 @@ public class IamConditionContextResolver {
         if (RequestConditionKeys.requestKeys(action).isEmpty()) {
             return null;
         }
-        JsonNode body = bufferedJsonBody(ctx);
-        return body == null ? null : requestConditions(action, member -> {
-            JsonNode value = body.at("/" + member.replace('.', '/'));
-            return value.isTextual() || value.isBoolean() ? value.asText() : null;
+        JsonNode body = PassedRoles.jsonBody(ctx);
+        return requestConditions(action, member -> {
+            if ("eks:DisassociateAccessPolicy".equals(action) && "policyArn".equals(member)) {
+                return ResourceArnBuilder.eksAccessPolicyArn(ctx);
+            }
+            JsonNode value = body == null ? null : body.at("/" + member.replace('.', '/'));
+            return value != null && (value.isTextual() || value.isBoolean()) ? value.asText() : null;
         });
+    }
+
+    /** Existing access-entry identity always comes from the exact authorized resource, not extra JSON fields. */
+    public Map<String, List<String>> withEksAccessEntryConditions(String scope, String action, String resource,
+                                                                 String region, Map<String, List<String>> context) {
+        if (!"eks".equals(scope) || "eks:CreateAccessEntry".equals(action)
+                || !RequestConditionKeys.takes(action, "eks:principalArn")) {
+            return context;
+        }
+        Map<String, List<String>> result = context == null ? new LinkedHashMap<>() : new LinkedHashMap<>(context);
+        result.remove("eks:principalArn");
+        result.remove("eks:accessEntryType");
+        if ("eks:DisassociateAccessPolicy".equals(action)) {
+            result.remove("eks:accessScope");
+        }
+        if (eksService.isResolvable()) {
+            eksService.get().storedAccessEntry(resource, region).ifPresent(stored -> {
+                result.put("eks:principalArn", List.of(stored.entry().principalArn()));
+                result.put("eks:accessEntryType", List.of(stored.entry().type()));
+                if ("eks:DisassociateAccessPolicy".equals(action)) {
+                    String policy = result.getOrDefault("eks:policyArn", List.of("")).getFirst();
+                    stored.accessPolicies().stream().filter(associated -> policy.equals(associated.policyArn()))
+                            .findFirst().ifPresent(associated ->
+                                    result.put("eks:accessScope", List.of(associated.accessScope().type())));
+                }
+            });
+        }
+        return result;
     }
 
     /** Logs tag operations and group mutations use the handler's resource and request scope. */

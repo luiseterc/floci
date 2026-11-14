@@ -11,11 +11,51 @@
       "ec2-instance-connect:privateIpAddress",
       "ec2-instance-connect:remotePort"
     ],
+    "eks:AssociateAccessPolicy": [
+      "eks:accessEntryType",
+      "eks:accessScope",
+      "eks:policyArn",
+      "eks:principalArn"
+    ],
+    "eks:CreateAccessEntry": [
+      "eks:accessEntryType",
+      "eks:principalArn"
+    ],
     "eks:CreateCluster": [
       "eks:authenticationMode",
       "eks:bootstrapClusterCreatorAdminPermissions",
       "eks:endpointPrivateAccess",
       "eks:endpointPublicAccess"
+    ],
+    "eks:DeleteAccessEntry": [
+      "eks:accessEntryType",
+      "eks:principalArn"
+    ],
+    "eks:DescribeAccessEntry": [
+      "eks:accessEntryType",
+      "eks:principalArn"
+    ],
+    "eks:DisassociateAccessPolicy": [
+      "eks:accessEntryType",
+      "eks:accessScope",
+      "eks:policyArn",
+      "eks:principalArn"
+    ],
+    "eks:ListAssociatedAccessPolicies": [
+      "eks:accessEntryType",
+      "eks:principalArn"
+    ],
+    "eks:TagResource": [
+      "eks:accessEntryType",
+      "eks:principalArn"
+    ],
+    "eks:UntagResource": [
+      "eks:accessEntryType",
+      "eks:principalArn"
+    ],
+    "eks:UpdateAccessEntry": [
+      "eks:accessEntryType",
+      "eks:principalArn"
     ],
     "eks:UpdateClusterConfig": [
       "eks:authenticationMode",
@@ -60,6 +100,25 @@
         "remotePort"
       ]
     },
+    "eks:AssociateAccessPolicy": {
+      "eks:accessScope": [
+        "accessScope.type"
+      ],
+      "eks:policyArn": [
+        "policyArn"
+      ],
+      "eks:principalArn": [
+        "principalArn"
+      ]
+    },
+    "eks:CreateAccessEntry": {
+      "eks:accessEntryType": [
+        "type"
+      ],
+      "eks:principalArn": [
+        "principalArn"
+      ]
+    },
     "eks:CreateCluster": {
       "eks:authenticationMode": [
         "accessConfig.authenticationMode"
@@ -72,6 +131,34 @@
       ],
       "eks:endpointPublicAccess": [
         "resourcesVpcConfig.endpointPublicAccess"
+      ]
+    },
+    "eks:DeleteAccessEntry": {
+      "eks:principalArn": [
+        "principalArn"
+      ]
+    },
+    "eks:DescribeAccessEntry": {
+      "eks:principalArn": [
+        "principalArn"
+      ]
+    },
+    "eks:DisassociateAccessPolicy": {
+      "eks:policyArn": [
+        "policyArn"
+      ],
+      "eks:principalArn": [
+        "principalArn"
+      ]
+    },
+    "eks:ListAssociatedAccessPolicies": {
+      "eks:principalArn": [
+        "principalArn"
+      ]
+    },
+    "eks:UpdateAccessEntry": {
+      "eks:principalArn": [
+        "principalArn"
       ]
     },
     "eks:UpdateClusterConfig": {

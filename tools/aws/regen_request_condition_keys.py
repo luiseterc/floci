@@ -68,13 +68,25 @@ SERVICES = {
     "eks": {
         "model": "eks",
         "request": {
+            "eks:accessEntryType": "type",
+            "eks:accessScope": "type",
+            "eks:policyArn": "policyArn",
+            "eks:principalArn": "principalArn",
             "eks:authenticationMode": "authenticationMode",
             "eks:bootstrapClusterCreatorAdminPermissions": "bootstrapClusterCreatorAdminPermissions",
             "eks:endpointPrivateAccess": "endpointPrivateAccess",
             "eks:endpointPublicAccess": "endpointPublicAccess",
         },
-        "stored": (),
-        "not_in_request": {},
+        "stored": ("eks:accessEntryType", "eks:principalArn", "eks:accessScope"),
+        "not_in_request": {
+            **{(f"eks:{action}", "eks:accessEntryType"): "the existing access entry's stored type"
+               for action in ("AssociateAccessPolicy", "DeleteAccessEntry", "DescribeAccessEntry",
+                              "DisassociateAccessPolicy", "ListAssociatedAccessPolicies", "TagResource",
+                              "UntagResource", "UpdateAccessEntry")},
+            **{(f"eks:{action}", "eks:principalArn"): "the tagged access entry's stored principal"
+               for action in ("TagResource", "UntagResource")},
+            ("eks:DisassociateAccessPolicy", "eks:accessScope"): "the existing policy association's stored scope",
+        },
     },
     "lambda": {
         "model": "lambda-web",

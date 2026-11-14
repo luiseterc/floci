@@ -1413,6 +1413,14 @@ public class ResourceArnBuilder {
         };
     }
 
+    /** The policy ARN on the disassociation route, decoded exactly as the handler's path parameter. */
+    public static String eksAccessPolicyArn(ContainerRequestContext ctx) {
+        String[] segments = IamActionRegistry.routedPath(ctx).substring(1).split("/", -1);
+        int end = accessEntryEnd(segments, ctx.getMethod());
+        return end < segments.length - 1
+                ? pathSegment(String.join("/", List.of(segments).subList(end + 1, segments.length))) : null;
+    }
+
     /**
      * Where an access entry's principal ends in {@code segments}: before {@code access-policies} on the routes
      * that act on the entry's policies, as the router reads them (a DELETE only when a cluster access policy

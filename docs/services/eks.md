@@ -18,6 +18,14 @@ botocore. Omitted attributes remain absent from the IAM context; stored cluster 
 and service defaults do not supply missing request conditions. Generic request-tag
 conditions continue to apply alongside these EKS-specific keys.
 
+`CreateAccessEntry` also evaluates the explicitly supplied `eks:principalArn` and
+`eks:accessEntryType`. Existing access-entry operations read those values from the
+exact stored entry, with account, Region and cluster-incarnation isolation; an extra
+JSON member cannot replace the principal selected by the URI. `AssociateAccessPolicy`
+reads `eks:policyArn` and `eks:accessScope` from its request. Disassociation reads the
+policy ARN from its URI and the scope from the existing association. These are IAM
+management API checks; they do not change Kubernetes RBAC enforcement.
+
 ## Supported Operations
 
 | Operation | Description |

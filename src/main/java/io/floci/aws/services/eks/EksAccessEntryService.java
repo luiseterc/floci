@@ -241,6 +241,13 @@ public class EksAccessEntryService {
                 .map(StoredEntry::entry).filter(entry -> "EC2_LINUX".equals(entry.type()));
     }
 
+    /** Read an exact ARN within the current cluster incarnation, without requiring an API access mode. */
+    synchronized Optional<StoredEntry> storedEntryByArn(Cluster cluster, String arn) {
+        String prefix = prefix(cluster);
+        return entries.scan(key -> key.startsWith(prefix)).stream()
+                .filter(stored -> arn.equals(stored.entry().accessEntryArn())).findFirst();
+    }
+
     public synchronized AccessEntry describe(Cluster cluster, String principal) {
         return storedEntry(cluster, principal).entry();
     }

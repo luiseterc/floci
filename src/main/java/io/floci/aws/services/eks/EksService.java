@@ -961,6 +961,21 @@ public class EksService implements TagHandler, ResourceProvider, Ec2InstanceLaun
         }
     }
 
+    /** An exact stored access entry for IAM, isolated by account, Region and cluster incarnation. */
+    public Optional<EksAccessEntryService.StoredEntry> storedAccessEntry(String arn, String region) {
+        if (!AwsArnUtils.isArnFor(arn, "eks")) {
+            return Optional.empty();
+        }
+        AwsArnUtils.Arn parsed = AwsArnUtils.parse(arn);
+        String[] parts = parsed.resource().split("/", 3);
+        if (!region.equals(parsed.region()) || !regionResolver.getAccountId().equals(parsed.accountId())
+                || parts.length != 3 || !"access-entry".equals(parts[0])) {
+            return Optional.empty();
+        }
+        return storage.get(clusterKey(region, parts[1]))
+                .flatMap(cluster -> accessEntries.storedEntryByArn(cluster, arn));
+    }
+
     /** The cluster {@code name} in the request's Region. */
     public Cluster describeCluster(String name) {
         Cluster cluster = storage.get(requestClusterKey(name))
