@@ -1666,7 +1666,7 @@ public class S3Service implements Resettable, ResourceProvider {
                 RequestPrincipal.caller(caller),
                 action,
                 resourceArn,
-                bucketPolicyContext(caller, requestConditions));
+                bucketPolicyContext(caller, withBucketTags(bucketName, action, requestConditions)));
 
         if (decision == ResourcePolicyDecision.EXPLICIT_DENY) {
             throw accessDeniedException(bucketName, key);
@@ -1679,6 +1679,15 @@ public class S3Service implements Resettable, ResourceProvider {
             return;
         }
         throw accessDeniedException(bucketName, key);
+    }
+
+    private Map<String, List<String>> withBucketTags(String bucketName, String action,
+                                                     Map<String, List<String>> requestConditions) {
+        Map<String, List<String>> conditions = new HashMap<>(bucketTagConditions(null, bucketName, action));
+        if (requestConditions != null) {
+            conditions.putAll(requestConditions);
+        }
+        return conditions;
     }
 
     /**
@@ -3908,7 +3917,56 @@ public class S3Service implements Resettable, ResourceProvider {
 
     // --- Bucket Tagging ---
 
+    public String getBucketAbac(String bucketName, String expectedOwner) {
+        return abacBucket(bucketName, expectedOwner).value().isAbacEnabled() ? "Enabled" : "Disabled";
+    }
+
+    public void putBucketAbac(String bucketName, String expectedOwner, String xml) {
+        AccountAwareStorageBackend.OwnedEntry<Bucket> owned = abacBucket(bucketName, expectedOwner);
+        if (!"AbacStatus".equals(XmlParser.rootElementName(xml))) {
+            throw new AwsException("MalformedXML", "The XML you provided was not well-formed or did not validate.", 400);
+        }
+        String status = XmlParser.extractFirst(xml, "Status", "");
+        if (!"Enabled".equals(status) && !"Disabled".equals(status)) {
+            throw new AwsException("InvalidArgument", "Status must be Enabled or Disabled.", 400);
+        }
+        owned.value().setAbacEnabled("Enabled".equals(status));
+        writeBucketForAccount(owned.account(), bucketName, owned.value());
+    }
+
+    private AccountAwareStorageBackend.OwnedEntry<Bucket> abacBucket(String bucketName, String expectedOwner) {
+        AccountAwareStorageBackend.OwnedEntry<Bucket> owned = resolveBucketEntry(bucketName)
+                .orElseThrow(() -> new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
+        if (expectedOwner != null && !expectedOwner.equals(owned.account())) {
+            throw new AwsException("AccessDenied", "Access Denied", 403);
+        }
+        return owned;
+    }
+
+    /** Tags can authorize bucket and object requests only after the bucket owner enables ABAC. */
+    public Map<String, List<String>> bucketTagConditions(String accountId, String bucketName, String action) {
+        Bucket bucket = accountId == null
+                ? abacBucket(bucketName, null).value() : bucketForAccount(accountId, bucketName);
+        if (!bucket.isAbacEnabled() || bucket.getTags() == null || bucket.getTags().isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<String>> conditions = new HashMap<>();
+        for (String prefix : List.of("aws:ResourceTag/", "s3:BucketTag/")) {
+            if (S3ControlTagConditionKeys.takes(action, prefix + "${TagKey}")) {
+                bucket.getTags().forEach((key, value) -> conditions.put(prefix + key, List.of(value)));
+            }
+        }
+        return conditions;
+    }
+
+    private static void requireLegacyTagging(Bucket bucket) {
+        if (bucket.isAbacEnabled()) {
+            throw new AwsException("InvalidRequest", "Use TagResource or UntagResource when bucket ABAC is enabled.", 400);
+        }
+    }
+
     public void putBucketTagging(String bucketName, Map<String, String> tags) {
+        requireLegacyTagging(bucketForAccount(null, bucketName));
         putBucketTaggingForAccount(null, bucketName, tags);
     }
 
@@ -4138,7 +4196,8 @@ public class S3Service implements Resettable, ResourceProvider {
         Bucket bucket = bucketStore.get(bucketName)
                 .orElseThrow(() -> new AwsException("NoSuchBucket",
                         "The specified bucket does not exist.", 404));
-        bucket.setTags(new java.util.HashMap<>());
+        requireLegacyTagging(bucket);
+        bucket.setTags(new HashMap<>());
         bucketStore.put(bucketName, bucket);
         LOG.debugv("Deleted tags from bucket: {0}", bucketName);
     }

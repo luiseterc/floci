@@ -53,8 +53,8 @@ class S3UnservedBucketSubresourceIntegrationTest {
         String bucket = createBucket("unserved-subresource-bucket");
         String[][] requests = {
             {"DELETE", "metadataConfiguration"}, {"DELETE", "metadataTable"},
-            {"GET", "metadataConfiguration"}, {"GET", "metadataTable"}, {"GET", "abac"}, {"GET", "session"},
-            {"PUT", "abac"}, {"PUT", "metadataJournalTable"}, {"PUT", "metadataInventoryTable"},
+            {"GET", "metadataConfiguration"}, {"GET", "metadataTable"}, {"GET", "session"},
+            {"PUT", "metadataJournalTable"}, {"PUT", "metadataInventoryTable"},
             {"PUT", "metadataAnnotationTable"}, {"POST", "metadataConfiguration"}, {"POST", "metadataTable"},
         };
         for (String[] request : requests) {
@@ -103,7 +103,7 @@ class S3UnservedBucketSubresourceIntegrationTest {
     @Test
     void aPutNamingASubresourceNeverCreatesTheBucket() {
         String bucket = neverCreated("never-created-by-a-subresource");
-        given().queryParam("abac", "").when().put("/" + bucket).then().statusCode(501);
+        given().queryParam("metadataJournalTable", "").when().put("/" + bucket).then().statusCode(501);
         given().queryParam("location", "").when().put("/" + bucket).then().statusCode(405);
         given().when().head("/" + bucket).then().statusCode(404);
     }

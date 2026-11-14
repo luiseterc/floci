@@ -55,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -989,7 +990,8 @@ class IamConditionContextResolverTest {
 
     @Test
     void bucketActionsResolveResourceTagsFromTheBucketsCurrentTags() {
-        when(s3Service.getBucketTagging("my-bucket")).thenReturn(Map.of("Owner", "alice"));
+        when(s3Service.bucketTagConditions(isNull(), eq("my-bucket"), anyString()))
+                .thenReturn(Map.of("aws:ResourceTag/Owner", List.of("alice")));
 
         for (String action : List.of("s3:GetBucketTagging", "s3:DeleteBucket")) {
             Map<String, List<String>> conditions =
@@ -1005,7 +1007,7 @@ class IamConditionContextResolverTest {
 
     @Test
     void bucketActionsOfferNoResourceTagsWhenTheBucketLookupFails() {
-        when(s3Service.getBucketTagging(anyString()))
+        when(s3Service.bucketTagConditions(isNull(), anyString(), anyString()))
                 .thenThrow(new AwsException("NoSuchBucket", "The specified bucket does not exist.", 404));
 
         assertNull(resolver.resolve("s3", "s3:GetBucketTagging", s3Request("/missing-bucket", "")));
@@ -1186,11 +1188,13 @@ class IamConditionContextResolverTest {
                    "Condition":{"StringEquals":{"aws:ResourceTag/Owner":"alice"}}}
                 ]}""";
 
-        when(s3Service.getBucketTagging("my-bucket")).thenReturn(Map.of("Owner", "alice"));
+        when(s3Service.bucketTagConditions(isNull(), eq("my-bucket"), anyString()))
+                .thenReturn(Map.of("aws:ResourceTag/Owner", List.of("alice")));
         assertEquals(Decision.ALLOW, evaluator.simulateCustomPolicy(List.of(policy), "s3:GetBucketTagging", "*",
                 resolver.resolve("s3", "s3:GetBucketTagging", s3Request("/my-bucket", ""))));
 
-        when(s3Service.getBucketTagging("my-bucket")).thenReturn(Map.of("Owner", "bob"));
+        when(s3Service.bucketTagConditions(isNull(), eq("my-bucket"), anyString()))
+                .thenReturn(Map.of("aws:ResourceTag/Owner", List.of("bob")));
         assertEquals(Decision.DENY, evaluator.simulateCustomPolicy(List.of(policy), "s3:GetBucketTagging", "*",
                 resolver.resolve("s3", "s3:GetBucketTagging", s3Request("/my-bucket", ""))));
     }

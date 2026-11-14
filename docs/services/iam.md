@@ -2952,8 +2952,10 @@ floci populates:
   tag-on-create check above.
 - `aws:ResourceTag/<key>`: the target resource's current tags, for `ec2:CreateTags`,
   `ec2:DeleteTags`, `ec2:TerminateInstances` and `ec2:DescribeInstances` (the first
-  `ResourceId.N` or `InstanceId.N`), and for `s3:GetBucketTagging`, `s3:DeleteBucket` and the
-  `s3:PutBucketTagging` that `DeleteBucketTagging` is checked as (the bucket). A request naming several EC2 resources is evaluated
+  `ResourceId.N` or `InstanceId.N`). S3 bucket, object and S3 Control tagging actions receive
+  bucket tags only when bucket ABAC is enabled, under `aws:ResourceTag/<key>` and
+  `s3:BucketTag/<key>` as listed for the action in the generated S3 condition-key table.
+  A request naming several EC2 resources is evaluated
   once per resource and denied when any of them fails the condition, as on AWS.
   `logs:CreateLogStream`, `logs:DeleteLogStream`, `logs:TagResource`, `logs:UntagResource`,
   `logs:ListTagsForResource`, `logs:DeleteLogGroup`, `logs:PutRetentionPolicy` and

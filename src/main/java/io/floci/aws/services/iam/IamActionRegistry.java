@@ -903,6 +903,7 @@ public class IamActionRegistry {
     }
 
     private static final List<SubResourceAction> GET_BUCKET_SUBRESOURCES = List.of(
+            sub("abac",              "s3:GetBucketAbac"),
             sub("uploads",           "s3:ListBucketMultipartUploads"),
             sub("notification",      "s3:GetBucketNotification"),
             sub("versioning",        "s3:GetBucketVersioning"),
@@ -929,6 +930,7 @@ public class IamActionRegistry {
             sub("inventory",         "s3:GetInventoryConfiguration"));
 
     private static final List<SubResourceAction> PUT_BUCKET_SUBRESOURCES = List.of(
+            sub("abac",              "s3:PutBucketAbac"),
             sub("notification",      "s3:PutBucketNotification"),
             sub("versioning",        "s3:PutBucketVersioning"),
             sub("tagging",           "s3:PutBucketTagging"),

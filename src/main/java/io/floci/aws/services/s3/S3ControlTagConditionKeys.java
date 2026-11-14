@@ -17,7 +17,7 @@ import java.util.function.Supplier;
  * {@code aws:TagKeys}, read from the table {@code tools/aws/regen_s3control_tag_condition_keys.py}
  * generates: the actions the Service Reference gives either key, and the request members botocore's
  * {@code s3control} model carries them in. S3 Control's routes are checked as the action of their
- * operation's name, so an action names its operation's members. The table also records
+ * operation's name, so an action names its operation's members. The table also records bucket resource tag keys and
  * {@code s3:ResourceAccount} for S3 and S3 Control authorization, supplied from the resolved owner.
  */
 public final class S3ControlTagConditionKeys {

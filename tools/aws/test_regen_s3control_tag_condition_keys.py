@@ -42,7 +42,8 @@ def test_body_tags_feed_both_keys_and_query_tag_keys_feed_tag_keys():
 def test_the_vendored_table_reads_tag_resource_and_untag_resource():
     document = json.loads(OUTPUT.read_text())
     assert validate(document) == []
-    assert document["actions"]["s3:TagResource"] == ["aws:RequestTag/${TagKey}", "aws:TagKeys", "s3:ResourceAccount"]
+    assert document["actions"]["s3:TagResource"] == ["aws:RequestTag/${TagKey}", "aws:ResourceTag/${TagKey}",
+                                                     "aws:TagKeys", "s3:BucketTag/${TagKey}", "s3:ResourceAccount"]
     assert "aws:TagKeys" in document["actions"]["s3:UntagResource"]
     assert document["members"]["s3:TagResource"]["aws:RequestTag/${TagKey}"] == [
         {"member": "Tags[Tag]", "key": "Key", "value": "Value"}]
@@ -95,3 +96,12 @@ def test_resource_account_only_action_and_resource_coverage():
         {"Name": "PutAccessPointPublicAccessBlock"}]}
     assert action_keys(reference) == {
         "s3:GetObject": ["s3:ResourceAccount"], "s3:ListBucket": ["s3:ResourceAccount"]}
+
+
+def test_bucket_resource_tags_are_read_from_the_service_reference():
+    reference = {"Name": "s3", "Resources": [
+        {"Name": "bucket", "ConditionKeys": ["aws:ResourceTag/${TagKey}", "s3:BucketTag/${TagKey}"]}],
+        "Actions": [{"Name": "GetBucketAbac", "Resources": [{"Name": "bucket"}]},
+                    {"Name": "Unrelated"}]}
+    assert action_keys(reference) == {
+        "s3:GetBucketAbac": ["aws:ResourceTag/${TagKey}", "s3:BucketTag/${TagKey}"]}

@@ -20,6 +20,7 @@ import io.floci.aws.services.iam.model.IamRole;
 import io.floci.aws.services.iam.model.IamUser;
 import io.floci.aws.services.lambdaweb.LambdaWebService;
 import io.floci.aws.services.s3.S3ConditionKeys;
+import io.floci.aws.services.s3.S3ControlArnUtils;
 import io.floci.aws.services.s3.S3ControlTagConditionKeys;
 import io.floci.aws.services.s3.S3ObjectActions;
 import io.floci.aws.services.s3.S3ObjectKeys;
@@ -455,10 +456,11 @@ public class IamConditionContextResolver {
         // S3 Control's request tag keys come from the generated table; S3's own below were measured
         // against AWS, and do not all match the Service Reference.
         if (IamActionRegistry.isS3ControlRequest("s3", ctx)) {
-            return S3ControlTagConditionKeys.conditions(action, () -> bodyText(ctx),
-                    ctx.getUriInfo().getQueryParameters());
+            return merge(S3ControlTagConditionKeys.conditions(action, () -> bodyText(ctx),
+                    ctx.getUriInfo().getQueryParameters()), s3BucketResourceTagConditionContext(action, ctx));
         }
-        Map<String, List<String>> conditions = s3ActionConditionContext(action, ctx);
+        Map<String, List<String>> conditions = merge(s3ActionConditionContext(action, ctx),
+                s3BucketResourceTagConditionContext(action, ctx));
         // A version action is checked only for a request naming a version, and carries its id.
         if (S3ObjectActions.isVersionAction(action) && ctx.getUriInfo() != null) {
             String versionId = ctx.getUriInfo().getQueryParameters().getFirst("versionId");
@@ -472,12 +474,8 @@ public class IamConditionContextResolver {
     private Map<String, List<String>> s3ActionConditionContext(String action, ContainerRequestContext ctx) {
         return switch (action) {
             case "s3:ListBucket" -> s3BucketListConditionContext(ctx.getUriInfo().getQueryParameters());
-            // DeleteBucketTagging is checked as s3:PutBucketTagging, and sends no tags of its own:
-            // what it has is the bucket's current tags, as GetBucketTagging does.
             case "s3:PutBucketTagging" -> "DELETE".equalsIgnoreCase(ctx.getMethod())
-                    ? s3BucketResourceTagConditionContext(ctx)
-                    : s3PutBucketTaggingConditionContext(ctx);
-            case "s3:GetBucketTagging", "s3:DeleteBucket" -> s3BucketResourceTagConditionContext(ctx);
+                    ? null : s3PutBucketTaggingConditionContext(ctx);
             // Object tags. Which action is given which key is what real AWS was measured to do,
             // not what reads naturally: s3:DeleteObject is given neither key, and s3:PutObject is
             // given the tags of the REQUEST only, never those of an object it is about to
@@ -700,26 +698,41 @@ public class IamConditionContextResolver {
         return conditions.isEmpty() ? null : conditions;
     }
 
-    /** {@code aws:ResourceTag/<key>} from the target bucket's current tags. */
-    private Map<String, List<String>> s3BucketResourceTagConditionContext(ContainerRequestContext ctx) {
-        String bucket = s3BucketName(ctx.getUriInfo().getPath());
-        if (bucket == null || !s3Service.isResolvable()) {
+    /** Enabled ABAC tags from the bucket this data-plane or S3 Control request actually targets. */
+    private Map<String, List<String>> s3BucketResourceTagConditionContext(String action, ContainerRequestContext ctx) {
+        if (!s3Service.isResolvable() || ctx.getUriInfo() == null) {
             return null;
         }
-        Map<String, String> existing;
+        String path = ctx.getUriInfo().getPath();
+        if (path == null) {
+            return null;
+        }
+        String account = null;
+        String bucket = s3BucketName(path);
+        if (IamActionRegistry.isS3ControlRequest("s3", ctx)) {
+            String prefix = "/v20180820/tags/";
+            String rooted = path.startsWith("/") ? path : "/" + path;
+            if (!rooted.startsWith(prefix)) {
+                return null;
+            }
+            AwsArnUtils.Arn arn = S3ControlArnUtils.parse(rooted.substring(prefix.length())).orElse(null);
+            if (arn == null || !S3ControlArnUtils.namesBucket(arn)) {
+                return null;
+            }
+            account = arn.accountId();
+            bucket = S3ControlArnUtils.bucketName(arn);
+        }
+        if (bucket == null) {
+            return null;
+        }
         try {
-            existing = s3Service.get().getBucketTagging(bucket);
-        } catch (RuntimeException e) {
-            // A bucket that does not exist has no tags to offer; the request fails on its own later.
-            LOG.debugv(e, "Could not read bucket tags for the IAM condition context: {0}", bucket);
+            Map<String, List<String>> conditions = s3Service.get().bucketTagConditions(account, bucket, action);
+            return conditions.isEmpty() ? null : conditions;
+        } catch (AwsException e) {
+            // A missing bucket has no tags; its handler still returns the service's missing-resource error.
+            LOG.debugv(e, "Could not read bucket ABAC tags for IAM: {0}", bucket);
             return null;
         }
-        if (existing == null || existing.isEmpty()) {
-            return null;
-        }
-        Map<String, List<String>> conditions = new LinkedHashMap<>();
-        existing.forEach((key, value) -> conditions.put(RESOURCE_TAG_PREFIX + key, List.of(value)));
-        return conditions;
     }
 
     /** Path-style bucket, the same reading {@code ResourceArnBuilder} applies to S3 paths. */

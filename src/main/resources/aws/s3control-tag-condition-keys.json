@@ -7,33 +7,46 @@
   },
   "actions": {
     "s3:AbortMultipartUpload": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
+    ],
+    "s3:AllowVendedLogDeliveryForResource": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}"
     ],
     "s3:AssociateAccessGrantsIdentityCenter": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:BypassGovernanceRetention": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:CreateAccessGrant": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:CreateAccessGrantsInstance": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:CreateAccessGrantsLocation": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:CreateAccessPoint": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -42,10 +55,14 @@
     ],
     "s3:CreateBucket": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:CreateBucketMetadataTableConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:CreateJob": [
@@ -63,50 +80,65 @@
     ],
     "s3:DeleteAccessGrant": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessGrantsInstance": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessGrantsInstanceResourcePolicy": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessGrantsLocation": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessPoint": [
+      "aws:ResourceTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessPointForObjectLambda": [
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessPointPolicy": [
+      "aws:ResourceTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteAccessPointPolicyForObjectLambda": [
       "s3:ResourceAccount"
     ],
     "s3:DeleteBucket": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteBucketMetadataTableConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteBucketPolicy": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteBucketWebsite": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteJobTagging": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -114,40 +146,56 @@
       "s3:ResourceAccount"
     ],
     "s3:DeleteObject": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteObjectAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteObjectTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteObjectVersion": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteObjectVersionAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteObjectVersionTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:DeleteStorageLensConfiguration": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DeleteStorageLensConfigurationTagging": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DeleteStorageLensGroup": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:DescribeJob": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -156,38 +204,47 @@
     ],
     "s3:DissociateAccessGrantsIdentityCenter": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetAccelerateConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessGrant": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessGrantsInstance": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessGrantsInstanceForPrefix": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessGrantsInstanceResourcePolicy": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessGrantsLocation": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessPoint": [
+      "aws:ResourceTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessPointConfigurationForObjectLambda": [
@@ -197,12 +254,14 @@
       "s3:ResourceAccount"
     ],
     "s3:GetAccessPointPolicy": [
+      "aws:ResourceTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessPointPolicyForObjectLambda": [
       "s3:ResourceAccount"
     ],
     "s3:GetAccessPointPolicyStatus": [
+      "aws:ResourceTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetAccessPointPolicyStatusForObjectLambda": [
@@ -212,79 +271,125 @@
       "s3:ResourceAccount"
     ],
     "s3:GetAnalyticsConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketAbac": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketAcl": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketCORS": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketLocation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketLogging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketMetadataTableConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketNotification": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketObjectLockConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketOwnershipControls": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketPolicy": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketPolicyStatus": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketPublicAccessBlock": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketRequestPayment": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketVersioning": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetBucketWebsite": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetDataAccess": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetEncryptionConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetIntelligentTieringConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetInventoryConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetJobTagging": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetLifecycleConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetMetricsConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetMultiRegionAccessPoint": [
@@ -300,81 +405,122 @@
       "s3:ResourceAccount"
     ],
     "s3:GetObject": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectAcl": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectAttributes": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectLegalHold": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectRetention": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectTorrent": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersion": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionAcl": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionAnnotationForReplication": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionAttributes": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionForReplication": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetObjectVersionTorrent": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetReplicationConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:GetStorageLensConfiguration": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetStorageLensConfigurationTagging": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetStorageLensDashboard": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:GetStorageLensGroup": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:InitiateReplication": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListAccessGrants": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -383,6 +529,7 @@
     ],
     "s3:ListAccessGrantsLocations": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -396,16 +543,23 @@
       "s3:ResourceAccount"
     ],
     "s3:ListBucket": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListBucketMultipartUploads": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListBucketVersions": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListCallerAccessGrants": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -416,12 +570,18 @@
       "s3:ResourceAccount"
     ],
     "s3:ListMultipartUploadParts": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListObjectAnnotations": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListObjectVersionAnnotations": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ListStorageLensConfigurations": [
@@ -432,20 +592,29 @@
     ],
     "s3:ListTagsForResource": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ObjectOwnerOverrideToBucketOwner": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PauseReplication": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutAccelerateConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutAccessGrantsInstanceResourcePolicy": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
@@ -453,6 +622,7 @@
       "s3:ResourceAccount"
     ],
     "s3:PutAccessPointPolicy": [
+      "aws:ResourceTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutAccessPointPolicyForObjectLambda": [
@@ -462,98 +632,157 @@
       "s3:ResourceAccount"
     ],
     "s3:PutAnalyticsConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketAbac": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketAcl": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketCORS": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketLogging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketNotification": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketObjectLockConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketOwnershipControls": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketPolicy": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketPublicAccessBlock": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketRequestPayment": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketVersioning": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutBucketWebsite": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutEncryptionConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutIntelligentTieringConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutInventoryConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutJobTagging": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:PutLifecycleConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutMetricsConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutMultiRegionAccessPointPolicy": [
       "s3:ResourceAccount"
     ],
     "s3:PutObject": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectAcl": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectLegalHold": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectRetention": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectVersionAcl": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectVersionAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutObjectVersionTagging": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutReplicationConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:PutStorageLensConfiguration": [
@@ -563,22 +792,33 @@
     ],
     "s3:PutStorageLensConfigurationTagging": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:ReplicateDelete": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ReplicateObject": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ReplicateObjectAnnotation": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:ReplicateTags": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:RestoreObject": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:SubmitMultiRegionAccessPointRoutes": [
@@ -586,43 +826,59 @@
     ],
     "s3:TagResource": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:UntagResource": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:UpdateAccessGrantsLocation": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:UpdateBucketMetadataAnnotationTableConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:UpdateBucketMetadataInventoryTableConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:UpdateBucketMetadataJournalTableConfiguration": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:UpdateJobPriority": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:UpdateJobStatus": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ],
     "s3:UpdateObjectEncryption": [
+      "aws:ResourceTag/${TagKey}",
+      "s3:BucketTag/${TagKey}",
       "s3:ResourceAccount"
     ],
     "s3:UpdateStorageLensGroup": [
       "aws:RequestTag/${TagKey}",
+      "aws:ResourceTag/${TagKey}",
       "aws:TagKeys",
       "s3:ResourceAccount"
     ]

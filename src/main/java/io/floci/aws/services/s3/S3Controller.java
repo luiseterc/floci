@@ -336,6 +336,13 @@ public class S3Controller {
             validateRawUri();
             S3Service.RequestAuthorization authorization = S3RequestAuthorizationParser.parseIfRequired(
                     s3Service.isAuthEnforced(), httpHeaders, uriInfo);
+            if (ResteasyRequests.queryParameters(uriInfo).containsKey("abac")) {
+                s3Service.authorizeBucketWrite(bucket, "s3:PutBucketAbac", authorization);
+                validateChecksumHeaders(httpHeaders, uriInfo, body);
+                s3Service.putBucketAbac(bucket, httpHeaders.getHeaderString("x-amz-expected-bucket-owner"),
+                        new String(body, StandardCharsets.UTF_8));
+                return Response.ok().build();
+            }
             if (hasQueryParam(uriInfo, "notification")) {
                 s3Service.authorizeBucketWrite(bucket, "s3:PutBucketNotification", authorization);
                 return handlePutBucketNotification(bucket, body,
@@ -619,6 +626,14 @@ public class S3Controller {
             validateRawUri();
             S3Service.RequestAuthorization authorization = S3RequestAuthorizationParser.parseIfRequired(
                     s3Service.isAuthEnforced(), httpHeaders, uriInfo);
+            if (ResteasyRequests.queryParameters(uriInfo).containsKey("abac")) {
+                s3Service.authorizeBucketRead(bucket, "s3:GetBucketAbac", authorization);
+                String status = s3Service.getBucketAbac(bucket,
+                        httpHeaders.getHeaderString("x-amz-expected-bucket-owner"));
+                String xml = new XmlBuilder().start("AbacStatus", AwsNamespaces.S3)
+                        .elem("Status", status).end("AbacStatus").build();
+                return Response.ok(xml).type(MediaType.APPLICATION_XML).build();
+            }
             if (params.has("uploads")) {
                 s3Service.authorizeBucketRead(bucket, "s3:ListBucketMultipartUploads", authorization);
                 return handleListMultipartUploads(bucket, uriInfo);

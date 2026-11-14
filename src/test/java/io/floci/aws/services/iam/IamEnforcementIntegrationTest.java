@@ -344,6 +344,8 @@ class IamEnforcementIntegrationTest {
         s3Service.createBucket(bobs, "us-east-1");
         s3Service.putBucketTagging(alices, Map.of("Owner", "alice"));
         s3Service.putBucketTagging(bobs, Map.of("Owner", "bob"));
+        s3Service.putBucketAbac(alices, null, "<AbacStatus><Status>Enabled</Status></AbacStatus>");
+        s3Service.putBucketAbac(bobs, null, "<AbacStatus><Status>Enabled</Status></AbacStatus>");
 
         assertEquals(Decision.ALLOW, evaluator.simulateCustomPolicy(
                 List.of(OWNER_SCOPED_S3_POLICY), "s3:GetBucketTagging", "arn:aws:s3:::" + alices,
