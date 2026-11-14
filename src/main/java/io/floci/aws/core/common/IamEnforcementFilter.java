@@ -23,6 +23,7 @@ import io.floci.aws.services.iam.ResourcePolicyProviders;
 import io.floci.aws.services.iam.ScpProvider;
 import io.floci.aws.services.iam.model.CallerContext;
 import io.floci.aws.services.iam.model.IamRole;
+import io.floci.aws.services.s3.S3GatewayEndpointFilter;
 import io.floci.aws.services.s3.S3ObjectActions;
 import io.floci.aws.services.s3.S3ScratchSpace;
 import io.floci.aws.services.s3.S3Service;
@@ -1638,6 +1639,13 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
                     conditionContext = new HashMap<>();
                 }
                 conditionContext.putAll(requestConditions);
+            }
+
+            if (action.startsWith("s3:")) {
+                if (conditionContext == null) {
+                    conditionContext = new HashMap<>();
+                }
+                conditionContext.putAll(S3GatewayEndpointFilter.conditions(currentVertxRequest));
             }
 
             ResourcePolicyDecision effectiveDecision = resourcePolicyDecision;

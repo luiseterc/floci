@@ -21,6 +21,7 @@ import io.floci.aws.services.iam.model.IamUser;
 import io.floci.aws.services.lambdaweb.LambdaWebService;
 import io.floci.aws.services.s3.S3ConditionKeys;
 import io.floci.aws.services.s3.S3ControlTagConditionKeys;
+import io.floci.aws.services.s3.S3GatewayEndpointFilter;
 import io.floci.aws.services.s3.S3ObjectActions;
 import io.floci.aws.services.s3.S3ObjectKeys;
 import io.floci.aws.services.s3.S3Service;
@@ -551,6 +552,10 @@ public class IamConditionContextResolver {
                     ctx.getUriInfo().getQueryParameters());
         }
         Map<String, List<String>> conditions = s3ActionConditionContext(action, ctx);
+        Map<String, List<String>> network = S3GatewayEndpointFilter.conditions(currentVertxRequest);
+        if (!network.isEmpty()) {
+            conditions = merge(conditions, network);
+        }
         // A version action is checked only for a request naming a version, and carries its id.
         if (S3ObjectActions.isVersionAction(action) && ctx.getUriInfo() != null) {
             String versionId = ctx.getUriInfo().getQueryParameters().getFirst("versionId");

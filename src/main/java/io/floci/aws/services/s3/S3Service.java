@@ -42,6 +42,7 @@ import io.floci.aws.services.lambda.model.LambdaFunction;
 import io.floci.aws.services.s3.model.*;
 import io.floci.aws.services.sns.SnsService;
 import io.floci.aws.services.sqs.SqsService;
+import io.quarkus.vertx.http.runtime.CurrentVertxRequest;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.inject.Instance;
@@ -291,7 +292,21 @@ public class S3Service implements Resettable, ResourceProvider {
     private final Clock clock;
     private final long restoreCompletionDelaySeconds;
 
+    private CurrentVertxRequest currentVertxRequest;
+
     @Inject
+    public S3Service(StorageFactory storageFactory, EmulatorConfig config,
+                     SqsService sqsService, SnsService snsService,
+                     Instance<LambdaService> lambdaServiceProvider,
+                     EventBridgeService eventBridgeService,
+                     Event<S3ObjectUpdatedEvent> s3UpdatedEvent,
+                     RegionResolver regionResolver, ObjectMapper objectMapper,
+                     IamService iamService, Clock clock, CurrentVertxRequest currentVertxRequest) {
+        this(storageFactory, config, sqsService, snsService, lambdaServiceProvider,
+                eventBridgeService, s3UpdatedEvent, regionResolver, objectMapper, iamService, clock);
+        this.currentVertxRequest = currentVertxRequest;
+    }
+
     public S3Service(StorageFactory storageFactory, EmulatorConfig config,
                      SqsService sqsService, SnsService snsService,
                      Instance<LambdaService> lambdaServiceProvider,
@@ -1710,12 +1725,13 @@ public class S3Service implements Resettable, ResourceProvider {
      * {@code aws:PrincipalArn} is the role's ARN. {@code requestConditions}, when present, are the keys
      * the request itself offers, such as an object creation's tags and Object Lock settings.
      */
-    private static Map<String, List<String>> bucketPolicyContext(CallerArns caller,
-                                                                 Map<String, List<String>> requestConditions) {
+    private Map<String, List<String>> bucketPolicyContext(CallerArns caller,
+                                                              Map<String, List<String>> requestConditions) {
         Map<String, List<String>> context = new HashMap<>();
         if (requestConditions != null) {
             context.putAll(requestConditions);
         }
+        context.putAll(S3GatewayEndpointFilter.conditions(currentVertxRequest));
         context.put("aws:PrincipalIsAWSService", List.of("false"));
         if (caller != null) {
             caller.putPrincipalKeys(context);
