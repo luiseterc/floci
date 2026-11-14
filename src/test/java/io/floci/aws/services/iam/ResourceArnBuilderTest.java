@@ -2176,26 +2176,31 @@ class ResourceArnBuilderTest {
         for (String path : new String[] {"/2018-10-31/layers/my-layer/versions/3",
                 "/2018-10-31/layers/my-layer/versions/3/policy",
                 "/2018-10-31/layers/my-layer/versions/3/policy/statement-1"}) {
+            String operation = path.endsWith("/statement-1") ? "RemoveLayerVersionPermission"
+                    : path.endsWith("/policy") ? "GetLayerVersionPolicy" : "GetLayerVersion";
+            when(ctx.getMethod()).thenReturn(operation.startsWith("Remove") ? "DELETE" : "GET");
             request(path);
-            assertEquals(version, builder.build("lambda", ctx, "us-east-1", ACCOUNT), path);
+            assertEquals(version, layerResource(operation, "us-east-1"), path);
         }
-        // Lambda looks a layer named by an ARN up by that name as given, not as the layer the ARN names, so
-        // the layer of that name is the one checked.
+        // GetLayerVersion accepts an unversioned ARN and checks the version that it names.
         String named = "arn:aws:lambda:us-east-1:000000000000:layer:my-layer";
+        when(ctx.getMethod()).thenReturn("GET");
         request("/2018-10-31/layers/" + named + "/versions/3");
-        assertEquals("arn:aws:lambda:us-east-1:000000000000:layer:" + named + ":3",
-                builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+        assertEquals(version, layerResource("GetLayerVersion", "us-east-1"));
         // GetLayerVersionByArn reads the version its Arn names.
         request("/2018-10-31/layers");
         queryParams.putSingle("find", "LayerVersion");
         queryParams.putSingle("Arn", version);
-        assertEquals(version, builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+        assertEquals(version, layerResource("GetLayerVersionByArn", "us-east-1"));
         queryParams.clear();
         // Listing layers, a layer's versions or configs, and creating a config, name no resource.
         for (String path : new String[] {"/2018-10-31/layers", "/2018-10-31/layers/my-layer/versions",
                 "/2020-04-22/code-signing-configs"}) {
             request(path);
-            assertEquals("*", builder.build("lambda", ctx, "us-east-1", ACCOUNT), path);
+            String operation = path.endsWith("/versions") ? "ListLayerVersions" : "ListLayers";
+            assertEquals("*", path.contains("/layers")
+                    ? layerResource(operation, "us-east-1")
+                    : builder.build("lambda", ctx, "us-east-1", ACCOUNT), path);
         }
         when(ctx.getMethod()).thenReturn("POST");
         request("/2020-04-22/code-signing-configs");
@@ -2203,7 +2208,7 @@ class ResourceArnBuilderTest {
         // PublishLayerVersion makes a version of the layer, so it is checked against the layer.
         request("/2018-10-31/layers/my-layer/versions");
         assertEquals("arn:aws:lambda:us-east-1:000000000000:layer:my-layer",
-                builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+                layerResource("PublishLayerVersion", "us-east-1"));
         // A function's own settings, such as its concurrency or versions, are checked against the function.
         request("/2015-03-31/functions/my-function/versions");
         assertEquals("arn:aws:lambda:us-east-1:000000000000:function:my-function",
@@ -2214,6 +2219,31 @@ class ResourceArnBuilderTest {
                 builder.build("lambda", ctx, "us-east-1", ACCOUNT));
     }
 
+    @ParameterizedTest
+    @CsvSource({"aws,us-west-2,us-east-1", "aws-cn,cn-northwest-1,cn-north-1",
+            "aws-us-gov,us-gov-east-1,us-gov-west-1"})
+    void lambdaLayerArnLookupKeepsItsCoordinatesAndNormalizesTheVersion(
+            String partition, String layerRegion, String requestRegion) {
+        String layer = "arn:" + partition + ":lambda:" + layerRegion + ":111122223333:layer:shared";
+        when(ctx.getMethod()).thenReturn("GET");
+        request("/2018-10-31/layers/" + layer.replace(":", "%3A") + "/versions/01");
+
+        assertEquals(layer + ":1", layerResource("GetLayerVersion", requestRegion));
+    }
+
+    @Test
+    void otherLayerRoutesKeepTheirLiteralNameResource() {
+        String layer = "arn:aws:lambda:us-west-2:111122223333:layer:shared";
+        String expected = "arn:aws:lambda:us-east-1:" + ACCOUNT + ":layer:" + layer + ":1";
+        when(ctx.getMethod()).thenReturn("DELETE");
+        request("/2018-10-31/layers/" + layer + "/versions/01");
+        assertEquals(expected, layerResource("DeleteLayerVersion", "us-east-1"));
+
+        when(ctx.getMethod()).thenReturn("GET");
+        request("/2018-10-31/layers/" + layer + "/versions/01/policy");
+        assertEquals(expected, layerResource("GetLayerVersionPolicy", "us-east-1"));
+    }
+
     @Test
     void aLayerVersionIsReadAsLambdaReadsItsNameAndNumber() {
         // Lambda parses the version number, so 01 is version 1, and the router keeps an encoded / inside the
@@ -2221,21 +2251,26 @@ class ResourceArnBuilderTest {
         when(ctx.getMethod()).thenReturn("GET");
         request("/2018-10-31/layers/my-layer/versions/01");
         assertEquals("arn:aws:lambda:us-east-1:000000000000:layer:my-layer:1",
-                builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+                layerResource("GetLayerVersion", "us-east-1"));
         request("/2018-10-31/layers/my%2Flayer/versions/3/policy");
         assertEquals("arn:aws:lambda:us-east-1:000000000000:layer:my/layer:3",
-                builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+                layerResource("GetLayerVersionPolicy", "us-east-1"));
         when(ctx.getMethod()).thenReturn("POST");
         request("/2018-10-31/layers/my%2Flayer/versions");
         assertEquals("arn:aws:lambda:us-east-1:000000000000:layer:my/layer",
-                builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+                layerResource("PublishLayerVersion", "us-east-1"));
         // GetLayerVersionByArn parses the number the same way.
         when(ctx.getMethod()).thenReturn("GET");
         request("/2018-10-31/layers");
         queryParams.putSingle("find", "LayerVersion");
         queryParams.putSingle("Arn", "arn:aws:lambda:us-east-1:000000000000:layer:my-layer:01");
         assertEquals("arn:aws:lambda:us-east-1:000000000000:layer:my-layer:1",
-                builder.build("lambda", ctx, "us-east-1", ACCOUNT));
+                layerResource("GetLayerVersionByArn", "us-east-1"));
+    }
+
+    private String layerResource(String operation, String region) {
+        return builder.buildResources("lambda", "lambda:" + operation, ctx, region, ACCOUNT,
+                AwsRegions.partitionFor(region)).getFirst();
     }
 
     @Test
