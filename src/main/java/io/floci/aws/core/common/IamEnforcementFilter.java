@@ -1287,8 +1287,9 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
                 }
             }
             for (Map<String, List<String>> targetContext : resourceContexts) {
-                Map<String, List<String>> taggedContext = conditionContextResolver.withKmsResourceTags(
-                        credentialScope, action, resource, region, targetContext);
+                Map<String, List<String>> taggedContext = "kms".equals(credentialScope)
+                        ? conditionContextResolver.withKmsResourceTags(
+                                credentialScope, action, resource, region, targetContext) : targetContext;
                 Map<String, List<String>> effectiveContext = IamConditionContextResolver.withGlobalContext(
                         taggedContext, resource, region, accountId, resourceOwnerAccountId, action);
                 ResourcePolicyDecision resourcePolicyDecision = evaluator.evaluateResourcePolicyFor(
