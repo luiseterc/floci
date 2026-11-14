@@ -15,12 +15,11 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,16 +36,13 @@ class Ec2CreateFleetRollbackTest {
         LaunchTemplateData template = new LaunchTemplateData();
         template.setImageId("ami-test");
         template.setInstanceType("t3.micro");
-        when(service.resolveLaunchTemplateData(REGION, "lt-test", null, "1")).thenReturn(template);
+        when(service.prepareLaunchTemplate(REGION, "lt-test", null, "1", true))
+                .thenReturn(new Ec2Service.PreparedLaunchTemplate("lt-test", template));
 
         Reservation first = reservation("i-first");
         Reservation second = reservation("i-second");
-        when(service.runInstances(anyString(), anyString(), anyString(), anyInt(), anyInt(), nullable(String.class),
-                anyList(), nullable(String.class), nullable(String.class), anyList(), nullable(String.class),
-                nullable(String.class), nullable(Boolean.class), nullable(String.class), anyInt(),
-                nullable(String.class), nullable(LaunchTemplateData.MetadataOptions.class),
-                nullable(String.class), nullable(String.class), eq(false), nullable(String.class),
-                nullable(String.class), anyList(), eq(false), nullable(String.class), nullable(LaunchTemplateData.CapacityReservationSpecification.class)))
+        when(service.runFleetLaunch(eq(REGION), any(Ec2RunInstancesRequest.class), nullable(String.class),
+                nullable(Ec2LaunchPreparation.Launch.class)))
                 .thenReturn(first)
                 .thenReturn(second)
                 .thenThrow(new AwsException("InvalidSubnetID.NotFound", "launch failed", 400));
@@ -64,6 +60,8 @@ class Ec2CreateFleetRollbackTest {
         String responseBody = response.getEntity().toString();
         assertTrue(responseBody.contains("<Code>InvalidSubnetID.NotFound</Code>"));
         assertTrue(responseBody.contains("CreateFleet rollback incomplete for instance(s): i-first"));
+        verify(service, times(3)).runFleetLaunch(eq(REGION), any(Ec2RunInstancesRequest.class),
+                nullable(String.class), nullable(Ec2LaunchPreparation.Launch.class));
         verify(service).rollBackLaunch(REGION, first);
         verify(service).rollBackLaunch(REGION, second);
     }
