@@ -2,6 +2,11 @@
 
 **Protocol:** EC2 Query (XML) — `POST http://localhost:4566/` with `Action=` parameter
 
+`CreateLaunchTemplate` authorization uses the new launch-template ARN and its
+top-level request tags, including the separate `CreateTags` permission. Tags in
+`LaunchTemplateData` describe future resources and do not authorize the template.
+An authorized, valid `DryRun` returns `DryRunOperation` without storing a template.
+
 ## Instance IAM authorization
 
 With IAM enforcement enabled, modeled instance-list operations, including `StartInstances`, `StopInstances`, `TerminateInstances`, and `RebootInstances`, authorize each requested instance ARN before changing any instance state.

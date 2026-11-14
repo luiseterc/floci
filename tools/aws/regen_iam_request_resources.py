@@ -428,7 +428,7 @@ ID_TARGETS = {"ec2": ("instance",)}
 NETWORK_ID_PREFIXES = {"security-group": "sg-", "network-acl": "acl-",
                        "route-table": "rtb-", "network-interface": "eni-"}
 # Operations promoted from the staged namespace to the ordinary, metadata-derived resource rules.
-READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
+READ_IN_ID_TARGETS = {"ec2:CreateLaunchTemplate", "ec2:CreateVpc", "ec2:ModifyVpcAttribute",
                       "ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateInternetGateway", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint",
                       "ec2:ModifySubnetAttribute", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway",
                       "ec2:CreateRoute", "ec2:ReplaceRoute", "ec2:DeleteRoute", "ec2:AssociateRouteTable",

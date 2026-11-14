@@ -5221,7 +5221,8 @@ public class Ec2QueryHandler {
                 p.getFirst("LaunchTemplateName"),
                 parseLaunchTemplateData(p),
                 parseTagsForResource(p, "launch-template"),
-                p.getFirst("VersionDescription"));
+                p.getFirst("VersionDescription"),
+                Boolean.parseBoolean(p.getFirst("DryRun")));
         XmlBuilder xml = new XmlBuilder()
                 .start("CreateLaunchTemplateResponse", AwsNamespaces.EC2)
                 .elem("requestId", UUID.randomUUID().toString())

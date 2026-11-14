@@ -1017,7 +1017,7 @@
     "ec2:CreateIpamRoutingPolicyRegistration": {"action": "ec2:CreateIpamRoutingPolicyRegistration", "types": ["ipam-internet-registry-association"], "resources": []},
     "ec2:CreateIpamScope": {"action": "ec2:CreateIpamScope", "types": ["ipam", "ipam-scope"], "resources": []},
     "ec2:CreateKeyPair": {"action": "ec2:CreateKeyPair", "types": ["key-pair"], "resources": []},
-    "ec2:CreateLaunchTemplate": {"action": "ec2:CreateLaunchTemplate", "types": ["launch-template"], "resources": []},
+    "ec2:CreateLaunchTemplate": {"action": "ec2:CreateLaunchTemplate", "types": ["launch-template"], "resources": [{"type": "launch-template", "fill": {}, "find": ["LaunchTemplateName"]}]},
     "ec2:CreateLaunchTemplateVersion": {"action": "ec2:CreateLaunchTemplateVersion", "types": ["launch-template"], "resources": []},
     "ec2:CreateLocalGatewayRoute": {"action": "ec2:CreateLocalGatewayRoute", "types": ["local-gateway-route-table", "local-gateway-virtual-interface-group", "network-interface", "prefix-list"], "resources": []},
     "ec2:CreateLocalGatewayRouteTable": {"action": "ec2:CreateLocalGatewayRouteTable", "types": ["local-gateway", "local-gateway-route-table"], "resources": []},

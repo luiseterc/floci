@@ -9827,7 +9827,12 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
 
     public LaunchTemplate createLaunchTemplate(String region, String name, LaunchTemplateData data,
                                                List<Tag> launchTemplateTags, String versionDescription) {
-        ensureDefaultResources(region);
+        return createLaunchTemplate(region, name, data, launchTemplateTags, versionDescription, false);
+    }
+
+    /** Validate a dry run and return DryRunOperation before storing a template. */
+    public LaunchTemplate createLaunchTemplate(String region, String name, LaunchTemplateData data,
+                                               List<Tag> launchTemplateTags, String versionDescription, boolean dryRun) {
         if (name == null || name.isBlank()) {
             throw new AwsException("MissingParameter", "The request must contain the parameter LaunchTemplateName", 400);
         }
@@ -9839,6 +9844,10 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
                     "Launch template name already in use.", 400);
         }
 
+        if (dryRun) {
+            throw dryRunOperation();
+        }
+        ensureDefaultResources(region);
         LaunchTemplate launchTemplate = new LaunchTemplate();
         launchTemplate.setLaunchTemplateId("lt-" + randomHex(17));
         launchTemplate.setLaunchTemplateName(name);
