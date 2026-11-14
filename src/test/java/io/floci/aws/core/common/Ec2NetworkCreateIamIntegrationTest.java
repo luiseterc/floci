@@ -8,6 +8,7 @@ import io.floci.aws.testing.PartitionCleanup;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -34,9 +35,47 @@ class Ec2NetworkCreateIamIntegrationTest {
     @RegisterExtension
     final PartitionCleanup cleanup = new PartitionCleanup();
 
+    @Test
+    void gatewayEndpointChecksEverySuppliedRouteTable() {
+        String user = "endpoint-routes-" + UUID.randomUUID();
+        UserCredentials credentials = EnforcementFixtures.createUser(cleanup, endpoint.getPort(),
+                auth("000000000000", "iam"), user);
+        try (Ec2Client admin = AwsTestClients.create(Ec2Client.builder(), "000000000000", Region.US_EAST_1, endpoint);
+             Ec2Client client = AwsTestClients.create(Ec2Client.builder(), credentials.accessKeyId(),
+                     credentials.secretAccessKey(), Region.US_EAST_1, endpoint)) {
+            String vpc = admin.createVpc(r -> r.cidrBlock("10.204.0.0/16")).vpc().vpcId();
+            String first = admin.createRouteTable(r -> r.vpcId(vpc)).routeTable().routeTableId();
+            String second = admin.createRouteTable(r -> r.vpcId(vpc)).routeTable().routeTableId();
+            String allow = """
+                    {"Effect":"Allow","Action":"ec2:CreateVpcEndpoint",
+                     "Resource":"arn:aws:ec2:us-east-1:000000000000:*"}
+                    """;
+            String deny = """
+                    {"Effect":"Deny","Action":"ec2:CreateVpcEndpoint",
+                     "Resource":"arn:aws:ec2:us-east-1:000000000000:route-table/%s"}
+                    """.formatted(second);
+            try {
+                policy(user, allow + "," + deny);
+                denied(() -> client.createVpcEndpoint(r -> r.vpcId(vpc).vpcEndpointType("Gateway")
+                        .serviceName("com.amazonaws.us-east-1.s3").routeTableIds(first, second)));
+                policy(user, allow);
+                String id = client.createVpcEndpoint(r -> r.vpcId(vpc).vpcEndpointType("Gateway")
+                        .serviceName("com.amazonaws.us-east-1.s3").routeTableIds(first, second))
+                        .vpcEndpoint().vpcEndpointId();
+                admin.deleteVpcEndpoints(r -> r.vpcEndpointIds(id));
+            } finally {
+                admin.describeVpcEndpoints().vpcEndpoints().stream().filter(e -> vpc.equals(e.vpcId()))
+                        .forEach(e -> admin.deleteVpcEndpoints(r -> r.vpcEndpointIds(e.vpcEndpointId())));
+                admin.deleteRouteTable(r -> r.routeTableId(second));
+                admin.deleteRouteTable(r -> r.routeTableId(first));
+                admin.deleteVpc(r -> r.vpcId(vpc));
+            }
+        }
+    }
+
     @ParameterizedTest
     @CsvSource({"CreateSubnet,subnet", "CreateRouteTable,route-table", "CreateSecurityGroup,security-group",
-            "CreateInternetGateway,internet-gateway", "CreateVpcEndpoint,vpc-endpoint"})
+            "CreateInternetGateway,internet-gateway", "CreateVpcEndpoint,vpc-endpoint", "AllocateAddress,elastic-ip"})
     void creationChecksNewResourceTagsAndParentOwnershipSeparately(String action, String type) {
         String name = "network-create-" + UUID.randomUUID();
         UserCredentials credentials = EnforcementFixtures.createUser(cleanup, endpoint.getPort(),
@@ -74,7 +113,7 @@ class Ec2NetworkCreateIamIntegrationTest {
                 denied(() -> create(client, action, type, vpc, "integration-test"));
                 policy(name, create.replace(":000000000000:", ":111122223333:") + "," + tags + "," + parent);
                 denied(() -> create(client, action, type, vpc, "integration-test"));
-                if (!action.equals("CreateInternetGateway")) {
+                if (!action.equals("CreateInternetGateway") && !action.equals("AllocateAddress")) {
                     policy(name, create + "," + tags);
                     denied(() -> create(client, action, type, vpc, "integration-test"));
                     policy(name, create + "," + tags + "," + parent.replace("parent-owner", "integration-test"));
@@ -105,6 +144,7 @@ class Ec2NetworkCreateIamIntegrationTest {
                     .serviceName("com.amazonaws.us-east-1.s3").tagSpecifications(tags)).vpcEndpoint().vpcEndpointId();
             case "CreateInternetGateway" -> client.createInternetGateway(r -> r.tagSpecifications(tags))
                     .internetGateway().internetGatewayId();
+            case "AllocateAddress" -> client.allocateAddress(r -> r.domain("vpc").tagSpecifications(tags)).allocationId();
             default -> throw new IllegalArgumentException(action);
         };
     }
@@ -116,6 +156,7 @@ class Ec2NetworkCreateIamIntegrationTest {
             case "CreateSecurityGroup" -> admin.deleteSecurityGroup(r -> r.groupId(id));
             case "CreateVpcEndpoint" -> admin.deleteVpcEndpoints(r -> r.vpcEndpointIds(id));
             case "CreateInternetGateway" -> admin.deleteInternetGateway(r -> r.internetGatewayId(id));
+            case "AllocateAddress" -> admin.releaseAddress(r -> r.allocationId(id));
             default -> throw new IllegalArgumentException(action);
         }
     }

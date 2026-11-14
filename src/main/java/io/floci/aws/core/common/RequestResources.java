@@ -112,7 +112,7 @@ public final class RequestResources {
         }
         Map<String, String> sent = IamConditionContextResolver.formParameters(ctx);
         JsonNode body = sent.isEmpty() ? located(table, operation, PassedRoles.jsonBody(ctx), ctx, labels) : null;
-        Map<String, String> form = located(table, operation, sent, ctx, labels);
+        Map<String, String> form = ec2Query(table, operation, located(table, operation, sent, ctx, labels));
         return resources.isEmpty() ? List.of()
                 : named(operation, resources, formats(table, operation), form, body, partition, region, accountId, stored);
     }
@@ -262,7 +262,7 @@ public final class RequestResources {
         }
         Map<String, String> sent = IamConditionContextResolver.formParameters(ctx);
         JsonNode body = sent.isEmpty() ? located(table, operation, PassedRoles.jsonBody(ctx), ctx, labels) : null;
-        Map<String, String> form = located(table, operation, sent, ctx, labels);
+        Map<String, String> form = ec2Query(table, operation, located(table, operation, sent, ctx, labels));
         Map<String, RequestResourceMembers.ArnFormat> formats = formats(table, operation);
         if (creates == null) {
             return named(operation, made, formats, form, body, partition, region, accountId, null);
@@ -781,6 +781,28 @@ public final class RequestResources {
      * a number, a boolean or a null, and a list member's only from a list, a single value giving none. A member
      * with a field gives that field of its structure, or of each of its list's structures.
      */
+    /** Normalize only generated EC2 wire members; JSON task inputs keep their SDK names. */
+    private static Map<String, String> ec2Query(RequestResourceMembers.Table table, String operation,
+                                               Map<String, String> sent) {
+        Map<RequestResourceMembers.Member, String> members = table.ec2Query().get(operation);
+        if (sent.isEmpty() || members == null) {
+            return sent;
+        }
+        Map<String, String> form = new HashMap<>(sent);
+        members.forEach((member, wire) -> {
+            // Ignore forged SDK/Query spellings the EC2 handler itself does not read.
+            form.keySet().removeIf(key -> key.equals(member.name()) || key.startsWith(member.name() + "."));
+            if (member.list()) {
+                for (int index = 1; sent.containsKey(wire + "." + index); index++) {
+                    form.put(member.name() + ".member." + index, sent.get(wire + "." + index));
+                }
+            } else if (sent.containsKey(wire)) {
+                form.put(member.name(), sent.get(wire));
+            }
+        });
+        return form;
+    }
+
     private static List<String> values(Map<String, String> form, JsonNode body, RequestResourceMembers.Member member) {
         List<String> values = new ArrayList<>();
         if (!form.isEmpty()) {

@@ -1617,3 +1617,33 @@ def test_network_creates_authorize_new_resource_and_existing_vpc(operation, kind
         expected[0]["made"] = True
         expected.append({"type": "vpc", "fill": {"VpcId": "VpcId"}})
     assert entry["resources"] == expected
+
+
+@pytest.mark.parametrize("documentation,output_id,input_id,expected", [
+    ("<p>Allocates an Elastic IP address to your account.</p>", True, False, True),
+    ("Allocates a pool for an Elastic IP address.", True, False, False),
+    ("Describes an Elastic IP address.", True, False, False),
+    ("Allocates an Elastic IP address.", False, False, False),
+    ("Allocates an Elastic IP address.", True, True, False),
+])
+def test_documented_creation_requires_direct_object_and_new_response_id(documentation, output_id, input_id, expected):
+    ec2 = model({"AllocateAddress": {"AllocationId": "String"} if input_id else {}}, "ec2")
+    ec2["operations"]["AllocateAddress"].update(documentation=documentation, output={"shape": "Out"})
+    ec2["shapes"]["Out"] = {"type": "structure", "members": {
+        "AllocationId" if output_id else "PublicIp": {"shape": "String"}}}
+    formats = {"elastic-ip": "arn:${Partition}:ec2:${Region}:${Account}:elastic-ip/${AllocationId}"}
+    assert r.with_documented_creation([], "ec2:AllocateAddress", ["elastic-ip"], formats, {"ec2": ec2}) == (
+        [{"type": "elastic-ip", "fill": {}, "made": True}] if expected else [])
+
+
+def test_ec2_query_names_follow_model_serialization_and_only_read_resource_members():
+    ec2 = model({"CreateNetworkInterface": {"Groups": "Strings", "SubnetId": "String", "Ignored": "Strings"}}, "ec2")
+    group = ec2["shapes"]["CreateNetworkInterfaceIn"]["members"]["Groups"]
+    group["locationName"] = "securityGroupId"
+    assert r.ec2_query_members("ec2:CreateNetworkInterface", {"ec2": ec2}, {"Groups", "SubnetId"}) == {
+        "Groups[]": "SecurityGroupId"}
+    group["queryName"] = "ExactGroupWireName"
+    assert r.ec2_query_members("ec2:CreateNetworkInterface", {"ec2": ec2}, {"Groups"}) == {
+        "Groups[]": "ExactGroupWireName"}
+    ec2["metadata"]["protocol"] = "query"
+    assert r.ec2_query_members("ec2:CreateNetworkInterface", {"ec2": ec2}, {"Groups"}) == {}

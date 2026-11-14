@@ -461,7 +461,7 @@ READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
                       "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
                       "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
                       "ec2:DeleteVpc", "ec2:DeleteSubnet", "ec2:DeleteRouteTable", "ec2:DeleteInternetGateway",
-                      "ec2:DeleteSecurityGroup"}
+                      "ec2:DeleteSecurityGroup", "ec2:CreateNetworkInterface", "ec2:AllocateAddress"}
 # Stored tags read by ARN for promoted scalar targets, separately from instance lists.
 READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
@@ -1505,6 +1505,40 @@ def with_made(resources: list[dict], operation: str, formats: dict[str, str]) ->
             for resource, is_made in zip(resources, made, strict=True)]
 
 
+def with_documented_creation(resources: list[dict], operation: str, types: list[str],
+                             formats: dict[str, str], models: dict[str, dict]) -> list[dict]:
+    """A create whose name differs from its type can name it in the operation's opening sentence:
+    AllocateAddress 'Allocates an Elastic IP address'. Require that direct object and the type's sole
+    ARN id as a string in the response, absent from the request. Pool ids echoed in the response and
+    types mentioned later in the documentation do not identify a newly created resource."""
+    name = operation.split(":", 1)[1]
+    verb = CREATING_RE.match(name)
+    if not verb:
+        return resources
+    named = {kind for resource in resources for kind in _kinds(resource)}
+    added = []
+    for kind in types:
+        variables = set(VARIABLE_RE.findall(formats.get(kind, ""))) - KNOWN_VARIABLES
+        if kind in named or len(variables) != 1:
+            continue
+        variable = next(iter(variables))
+        if kind_of(variable) != "id":
+            continue
+        phrase = r"[ -]+".join(re.escape(word) for word in re.split(r"[ -]+", kind.lower()))
+        opening = rf"^{verb.group().lower()}s? (?:a |an |the )?{phrase}\b"
+        for model in models.values():
+            spec = model["operations"].get(name, {})
+            if "input" not in spec or "output" not in spec or not re.match(opening, _lead(spec.get("documentation"))):
+                continue
+            inputs = model["shapes"][spec["input"]["shape"]].get("members", {})
+            outputs = model["shapes"][spec["output"]["shape"]].get("members", {})
+            if variable not in inputs and variable in outputs \
+                    and model["shapes"][outputs[variable]["shape"]]["type"] == "string":
+                added.append({"type": kind, "fill": {}, "made": True})
+                break
+    return resources + added
+
+
 def child_id(child: str, parent: str) -> str | None:
     """The variable a child type's ARN format adds to its parent's: the parent's with its leading resource type word
     replaced and one id appended (`listener/app/.../${ListenerId}` for `loadbalancer/app/...`); None for any other."""
@@ -1689,6 +1723,29 @@ def id_targets(operation: str, types: list[str], formats: dict[str, str], models
     return found
 
 
+def ec2_query_members(operation: str, models: dict[str, dict], named: set[str]) -> dict[str, str]:
+    """Wire names for the top-level EC2 members the rules read. EC2 lists use Name.N,
+    unlike Query's Name.member.N; locationName/queryName can also rename a member."""
+    result = {}
+    for model in models.values():
+        spec = model["operations"].get(operation.split(":", 1)[1], {})
+        if "ec2" not in _protocols(model) or "input" not in spec:
+            continue
+        for name, member in model["shapes"][spec["input"]["shape"]].get("members", {}).items():
+            shape = model["shapes"][member["shape"]]
+            suffix = _strings(model, shape)
+            if name not in named or suffix is None:
+                continue
+            location = member.get("locationName", name)
+            wire = member.get("queryName", location[:1].upper() + location[1:])
+            if suffix or wire != name:
+                path = name + suffix
+                if path in result and result[path] != wire:
+                    raise ValueError(f"{operation}: clients disagree on {name}'s EC2 Query name")
+                result[path] = wire
+    return result
+
+
 def entry_for(operation: str, upstream: dict, formats: dict[str, str], models: dict[str, dict]) -> dict:
     """What the file says for one operation."""
     types = upstream["types"] or []
@@ -1706,6 +1763,7 @@ def entry_for(operation: str, upstream: dict, formats: dict[str, str], models: d
             entry["targets"] = targets
         return entry
     resources = by_client(operation, models, lambda read: read_resources(operation, types, formats, read), formats)
+    resources = with_documented_creation(resources, operation, types, formats, models)
     resources = with_made(resources, operation, formats)
     if operation in MEASURED:
         resources = measured_resources(operation, types, formats, resources)
@@ -1718,6 +1776,9 @@ def entry_for(operation: str, upstream: dict, formats: dict[str, str], models: d
     if makes:
         entry["makes"] = makes
     named = _named(resources) | _named(creates) | _named(makes)
+    query_members = ec2_query_members(operation, models, named)
+    if query_members:
+        entry["ec2Query"] = query_members
     located = {member: where for member, where in located_members(models, operation.split(":", 1)[1]).items()
                if member in named}
     if located:
@@ -2256,7 +2317,7 @@ def validate(document: dict) -> list[str]:
             problems.append(f"{operation!r} is not an operation of a namespace the file reads")
             continue
         if not isinstance(entry, dict) or not {"action", "types", "resources"} <= set(entry) <= {
-                "action", "types", "resources", "creates", "makes", "located", "targets"}:
+                "action", "types", "resources", "creates", "makes", "located", "targets", "ec2Query"}:
             problems.append(f"{operation} is not an action, its types and its resources")
             continue
         if not isinstance(entry["action"], str) or not OPERATION_RE.match(entry["action"]) \
@@ -2296,6 +2357,13 @@ def validate(document: dict) -> list[str]:
                 values = [p for p in prefixes.values() if isinstance(p, str)]
                 if any(a.startswith(b) for i, a in enumerate(values) for j, b in enumerate(values) if i != j):
                     problems.append(f"{operation} has ambiguous id prefixes")
+        query_members = entry.get("ec2Query")
+        if query_members is not None and (namespace != "ec2" or not isinstance(query_members, dict)
+                or not query_members or not all(isinstance(member, str)
+                    and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\[\])?", member)
+                    and isinstance(wire, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", wire)
+                    for member, wire in query_members.items())):
+            problems.append(f"{operation} has invalid EC2 Query member names")
         located = entry.get("located", {})
         if not isinstance(located, dict) or not located and "located" in entry or not all(
                 isinstance(member, str) and PATH_RE.match(member) and isinstance(where, str) and LOCATED_RE.match(where)

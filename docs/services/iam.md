@@ -2744,6 +2744,12 @@ both the new resource ARN and the existing parent VPC. `ec2:CreateInternetGatewa
 authorizes the new gateway ARN. Tag-on-create checks apply to the new resource only;
 the parent VPC uses its own stored ownership tags.
 
+`ec2:CreateNetworkInterface` checks the new interface, its subnet and every supplied
+security group separately. The generated EC2 Query names preserve SDK list serialization
+(for example, `Groups` is sent as `SecurityGroupId.N`). `ec2:AllocateAddress` checks
+the new elastic IP and any supplied address pool; its created resource type is derived
+from botocore's operation description and returned allocation ID.
+
 The promoted network mutation operations include subnet attribute updates, route
 creation/replacement/deletion and association, gateway attachment/detachment,
 security-group ingress/egress changes, and VPC, subnet, route table, gateway, and
