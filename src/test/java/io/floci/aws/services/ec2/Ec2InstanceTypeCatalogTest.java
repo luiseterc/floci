@@ -61,6 +61,7 @@ class Ec2InstanceTypeCatalogTest {
             }
         }
         expected.addAll(List.of("c8g.24xlarge", "c8g.48xlarge", "m8g.24xlarge", "m8g.48xlarge"));
+        expected.addAll(List.of("c8gn.12xlarge", "c8gn.16xlarge", "c8gn.24xlarge", "c8gn.2xlarge", "c8gn.48xlarge", "c8gn.4xlarge", "c8gn.8xlarge", "c8gn.large", "c8gn.medium", "c8gn.xlarge"));
         assertEquals(expected, instanceTypes);
     }
 

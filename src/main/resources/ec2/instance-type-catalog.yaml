@@ -1206,3 +1206,146 @@ instanceTypes:
     networkCards:
       - networkCardIndex: 0
         maximumNetworkInterfaces: 4
+
+  # Public DescribeInstanceTypes snapshot: eu-west-1, 2026-11-14.
+  - instanceType: c8gn.12xlarge
+    processorManufacturer: AWS
+    vcpu: 48
+    memoryMib: 98304
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 30
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 12
+
+  - instanceType: c8gn.16xlarge
+    processorManufacturer: AWS
+    vcpu: 64
+    memoryMib: 131072
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 50
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 16
+
+  - instanceType: c8gn.24xlarge
+    processorManufacturer: AWS
+    vcpu: 96
+    memoryMib: 196608
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 50
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 24
+
+  - instanceType: c8gn.2xlarge
+    processorManufacturer: AWS
+    vcpu: 8
+    memoryMib: 16384
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 15
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 4
+
+  - instanceType: c8gn.48xlarge
+    processorManufacturer: AWS
+    vcpu: 192
+    memoryMib: 393216
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 50
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 12
+      - networkCardIndex: 1
+        maximumNetworkInterfaces: 12
+
+  - instanceType: c8gn.4xlarge
+    processorManufacturer: AWS
+    vcpu: 16
+    memoryMib: 32768
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 30
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 8
+
+  - instanceType: c8gn.8xlarge
+    processorManufacturer: AWS
+    vcpu: 32
+    memoryMib: 65536
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 30
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 10
+
+  - instanceType: c8gn.large
+    processorManufacturer: AWS
+    vcpu: 2
+    memoryMib: 4096
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 10
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 3
+
+  - instanceType: c8gn.medium
+    processorManufacturer: AWS
+    vcpu: 1
+    memoryMib: 2048
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 4
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 2
+
+  - instanceType: c8gn.xlarge
+    processorManufacturer: AWS
+    vcpu: 4
+    memoryMib: 8192
+    supportedArchitectures:
+      - arm64
+    currentGeneration: true
+    encryptionInTransitSupported: true
+    defaultNetworkCardIndex: 0
+    ipv4AddressesPerInterface: 15
+    networkCards:
+      - networkCardIndex: 0
+        maximumNetworkInterfaces: 4

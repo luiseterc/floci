@@ -45,6 +45,12 @@ EBS-only storage, and one network card supporting 3 interfaces and 10 IPv4 addre
 interface, following the [AWS R5 specifications](https://docs.aws.amazon.com/ec2/latest/instancetypes/mo.html).
 `DescribeInstanceTypes` and `DescribeInstanceTypeOfferings` use this same entry.
 
+The catalog includes the ten virtual `c8gn` sizes from `medium` through `48xlarge`,
+using public `DescribeInstanceTypes` metadata captured in `eu-west-1` on 2026-11-14.
+These ARM64 types have EBS-only storage and encryption in transit. The `48xlarge`
+entry preserves both network cards, with 12 interfaces per card. The checked-in
+`c8gn-instance-types.csv` fixture verifies the SDK metadata and offering lookups.
+
 The catalog also includes `i4i.large`: 2 vCPUs, 16 GiB of memory, Intel x86_64
 processors, 468 GB of local NVMe SSD storage, and one network card supporting
 3 interfaces and 10 IPv4 addresses per interface, following the
