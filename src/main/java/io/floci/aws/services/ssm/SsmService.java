@@ -1478,7 +1478,8 @@ public class SsmService implements ResourceProvider, StoredResourceArns {
                 if ("ssm".equals(arn.service()) && arn.resource().startsWith("parameter")) {
                     if (parameterRead && (!arn.resource().startsWith("parameter/")
                             || arn.resource().startsWith("parameter" + SECRET_REFERENCE_PREFIX)
-                            || !arn.accountId().equals(regionResolver.getAccountId())
+                            || !arn.accountId().equals(arn.resource().startsWith("parameter" + PUBLIC_PARAMETER_PREFIX)
+                                    ? "" : regionResolver.getAccountId())
                             || !arn.region().equals(region)
                             || !arn.partition().equals(regionResolver.partitionForRegion(region)))) {
                         return nameOrArn;

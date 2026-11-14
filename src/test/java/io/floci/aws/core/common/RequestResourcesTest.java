@@ -1189,6 +1189,34 @@ class RequestResourcesTest {
                 serverless, namespace -> kms));
     }
 
+    @Test
+    void publicSsmParametersHaveNoCallerAccountAcrossPartitions() {
+        String path = "/aws/service/ami-amazon-linux-latest";
+        String name = path + "/al2023-ami-kernel-default-arm64";
+        for (String partition : List.of("aws", "aws-cn", "aws-us-gov")) {
+            String region = switch (partition) {
+                case "aws-cn" -> "cn-north-1";
+                case "aws-us-gov" -> "us-gov-west-1";
+                default -> "us-east-1";
+            };
+            String prefix = "arn:" + partition + ":ssm:" + region + ":";
+            String arn = prefix + ":parameter" + name;
+            assertEquals(List.of(arn), RequestResources.of("ssm:GetParameter",
+                    json("{\"Name\":\" " + name + ":1 \"}"), partition, region, "000000000000", null));
+            assertEquals(List.of(arn), RequestResources.of("ssm:GetParameter",
+                    json("{\"Name\":\"" + arn + "\"}"), partition, region, "000000000000", null));
+            assertEquals(List.of(prefix + ":parameter" + path), RequestResources.of("ssm:GetParametersByPath",
+                    json("{\"Path\":\"" + path + "\"}"), partition, region, "000000000000", null));
+            assertEquals(List.of(arn, prefix + "000000000000:parameter/private/config"),
+                    RequestResources.of("ssm:GetParameters",
+                            json("{\"Names\":[\"" + name + "\",\"/private/config\"]}"),
+                            partition, region, "000000000000", null));
+            assertEquals(List.of(prefix + "000000000000:parameter/aws/service-other/name"),
+                    RequestResources.of("ssm:GetParameter", json("{\"Name\":\"/aws/service-other/name\"}"),
+                            partition, region, "000000000000", null));
+        }
+    }
+
     /**
      * A Parameter Store parameter is {@code parameter/<name>} whether its name starts with a slash or not, without the
      * whitespace around it, a name of two leading slashes keeping the second and one beginning {@code /parameter/}

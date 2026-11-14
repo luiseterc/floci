@@ -34,6 +34,12 @@ the `DocumentDescription` of `CreateDocument`, `UpdateDocument` and `DescribeDoc
 `ResourceType` and `ResourceId` name: `document/<name>`, `association/<id>` or `parameter/<name>`
 without its leading `/`. `CreateDocument` is checked against `document/<name>`.
 
+Public `/aws/service/` parameter reads use account-less ARNs for IAM authorization,
+including batch and path reads. `GetParameter` and `GetParameters` also accept the
+public parameter ARN in the request's partition and region. A caller-account ARN
+is not an alias for a public parameter. Explicit denies still apply, and a public
+parameter grant does not grant access to account-owned parameters in the same batch.
+
 `GetParameters` returns successful parameters alphabetically by `Name`, preserving
 the selected versions and labels.
 

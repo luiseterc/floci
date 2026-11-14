@@ -652,8 +652,12 @@ public final class RequestResources {
         for (Filling filling : fillings) {
             AwsArnUtils.Arn from = filling.from();
             if (from == null) {
+                // Public SSM parameters belong to AWS, not the caller. The namespace is reserved on writes.
+                String owner = format.format().contains(":ssm:")
+                        && filling.variables().getOrDefault("ParameterNameWithoutLeadingSlash", "")
+                                .startsWith("aws/service/") ? "" : account;
                 arns.add(withId(format.checked(render(format.format(), filling.variables(), partition, region,
-                        account)), format,
+                        owner)), format,
                         resource.types().getFirst(), filling.variables(), account.equals(accountId) ? stored : null,
                         region));
             } else {
