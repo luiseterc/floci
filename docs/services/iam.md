@@ -2738,6 +2738,11 @@ set to `CreateVpc`. Explicit denies on these resources still apply. The resource
 is generated from the Service Reference and botocore; other EC2 operations remain staged
 as described below.
 
+`ec2:CreateSubnet`, `ec2:CreateRouteTable`, and `ec2:CreateSecurityGroup` authorize
+both the new resource ARN and the existing parent VPC. `ec2:CreateInternetGateway`
+authorizes the new gateway ARN. Tag-on-create checks apply to the new resource only;
+the parent VPC uses its own stored ownership tags.
+
 `ec2:ModifyVpcAttribute` resolves the supplied `VpcId` to its ARN and checks the target's
 current stored tags under `aws:ResourceTag/` and `ec2:ResourceTag/`. Tags are read for each
 resolved ARN independently; request tags do not replace ownership tags on an existing VPC.

@@ -454,7 +454,8 @@ KNOWN_VARIABLES = {"Partition", "Region", "Account"}
 # share this reader and its generated condition contexts; requests without those lists stay unchanged.
 ID_TARGETS = {"ec2": {"member": "Resources", "prefixes": {"instance": "i-"}}}
 # Operations promoted from the staged namespace to the ordinary, metadata-derived resource rules.
-READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute"}
+READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
+                      "ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateInternetGateway", "ec2:CreateSecurityGroup"}
 # Stored tags read by ARN for promoted scalar targets, separately from instance lists.
 READ_RESOURCE_TAGS = {"ec2": {"vpc"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
