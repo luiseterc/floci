@@ -8,6 +8,13 @@ This includes primary interfaces held by an instance. Every member of a batch
 must satisfy its conditions before any tags change; another interface's VPC or
 tags cannot authorize it. Authorization reads do not create default resources.
 
+`AttachNetworkInterface`, `DetachNetworkInterface`, `DeleteNetworkInterface`, and
+`ModifyNetworkInterfaceAttribute` authorize their scoped resource ARNs. Attachment IDs
+resolve to the caller's existing interface and instance; each resource retains its own
+ownership tags. Interface conditions use stored VPC/subnet identity. ENI creation and
+security-group changes also evaluate each supplied subnet or group against its own VPC.
+These authorization lookups do not create default resources or change attachments.
+
 ## Instance IAM authorization
 
 With IAM enforcement enabled, modeled instance-list operations, including `StartInstances`, `StopInstances`, `TerminateInstances`, and `RebootInstances`, authorize each requested instance ARN before changing any instance state.

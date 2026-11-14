@@ -436,9 +436,11 @@ READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
                       "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
                       "ec2:DeleteVpc", "ec2:DeleteSubnet", "ec2:DeleteRouteTable", "ec2:DeleteInternetGateway",
                       "ec2:DeleteSecurityGroup", "ec2:CreateNetworkInterface", "ec2:AllocateAddress",
-                      "ec2:CreateNatGateway", "ec2:AssociateAddress", "ec2:ReleaseAddress"}
+                      "ec2:CreateNatGateway", "ec2:AssociateAddress", "ec2:ReleaseAddress",
+                      "ec2:AttachNetworkInterface", "ec2:DetachNetworkInterface", "ec2:DeleteNetworkInterface",
+                      "ec2:ModifyNetworkInterfaceAttribute"}
 # Stored tags read by ARN for promoted scalar targets, separately from instance lists.
-READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group", "elastic-ip"}}
+READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group", "elastic-ip", "network-interface", "instance"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
@@ -2266,7 +2268,9 @@ def with_through(resources: list[dict], types: list[str], members: dict[str, str
     the caller's resource at the other end."""
     through = []
     for member, kinds in sorted(reached.items()):
-        on = [kind for kind in types if kind in kinds]
+        direct = {kind for resource in resources if resource.get("fill") for kind in _kinds(resource)} \
+            if any(stem(member) == stem(kind) for kind in types) else set()
+        on = [kind for kind in types if kind in kinds and kind not in direct]
         if on and members.get(member) == member:
             through.append({"types": on, "through": member})
     return resources + through
@@ -2291,6 +2295,29 @@ def through_members(models: dict[str, dict], formats: dict[str, str]) -> dict[st
                 kinds = {stems[stem(field)] for field in fields if field != member and stem(field) in stems}
                 if kinds:
                     found.setdefault(member, set()).update(kinds)
+        # A resource can embed the record of an untyped relationship: an interface's Attachment
+        # holds AttachmentId and InstanceId, while its parent record supplies NetworkInterfaceId.
+        # Require the parent resource identity and the parent-qualified child shape, so request
+        # structures that merely mention several ids do not invent ownership relationships.
+        for parent_name, parent in model["shapes"].items():
+            fields = parent.get("members", {}) if parent.get("type") == "structure" else {}
+            parent_kind = stems.get(stem(parent_name))
+            if parent_kind is None or not any(stem(field) == stem(parent_name) for field in fields):
+                continue
+            for field, spec in fields.items():
+                child_name = spec.get("shape", "")
+                child = model["shapes"].get(child_name, {})
+                if child_name != parent_name + field or child.get("type") != "structure":
+                    continue
+                child_fields = child.get("members", {})
+                identity = field + "Id"
+                if identity not in child_fields or stem(identity) in stems:
+                    continue
+                kinds = {stems[stem(name)] for name in child_fields if name != identity and stem(name) in stems}
+                found.setdefault(identity, set()).update(kinds | {parent_kind})
+                for parent_id in fields:
+                    if parent_id.endswith("Id") and stem(parent_id) == stem(parent_name) and kinds:
+                        found.setdefault(parent_id, set()).update(kinds)
     return {member: sorted(kinds) for member, kinds in sorted(found.items())}
 
 

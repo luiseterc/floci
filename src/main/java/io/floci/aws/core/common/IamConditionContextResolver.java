@@ -915,6 +915,16 @@ public class IamConditionContextResolver {
         Map<String, List<String>> result = context == null ? new LinkedHashMap<>() : new LinkedHashMap<>(context);
         result.keySet().removeIf(key -> prefixes.stream().anyMatch(key::startsWith));
         putStoredTags(result, region, parts[1], prefixes);
+        if (List.of("ec2:CreateNetworkInterface", "ec2:ModifyNetworkInterfaceAttribute").contains(action)) {
+            ec2Service.get().interfaceCreationResourceContext(region, parts[0], parts[1])
+                    .forEach((key, value) -> result.put(key, List.of(value)));
+        }
+        if ("network-interface".equals(parts[0]) && List.of("ec2:AttachNetworkInterface",
+                "ec2:DetachNetworkInterface", "ec2:DeleteNetworkInterface",
+                "ec2:ModifyNetworkInterfaceAttribute").contains(action)) {
+            ec2Service.get().networkInterfaceConditionContext(region, parts[1])
+                    .forEach((key, value) -> result.put(key, List.of(value)));
+        }
         return result;
     }
 

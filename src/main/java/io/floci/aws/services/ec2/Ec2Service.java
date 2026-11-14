@@ -21,6 +21,7 @@ import io.floci.aws.core.common.RequestContext;
 import io.floci.aws.core.common.RequestScopes;
 import io.floci.aws.core.common.Resettable;
 import io.floci.aws.core.common.SmithyValidationErrors;
+import io.floci.aws.core.common.StoredResourceArns;
 import io.floci.aws.core.resource.ExplorerResource;
 import io.floci.aws.core.resource.ResourceProvider;
 import io.floci.aws.core.resource.SupportedResourceType;
@@ -166,7 +167,7 @@ import java.util.stream.Stream;
 import static io.floci.aws.services.ec2.Ec2Ids.randomHex;
 
 @ApplicationScoped
-public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettable {
+public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettable, StoredResourceArns {
 
     private static final Logger LOG = Logger.getLogger(Ec2Service.class);
 
@@ -11138,6 +11139,84 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
             context.put("ec2:AvailabilityZone", zone);
         }
         return Map.copyOf(context);
+    }
+
+    /** Identity of an existing subnet or security group, without creating default resources. */
+    public Map<String, String> interfaceCreationResourceContext(String region, String type, String id) {
+        String account = callerAccountId();
+        String vpc = null;
+        Map<String, String> context = new LinkedHashMap<>();
+        if ("subnet".equals(type)) {
+            Subnet subnet = (subnets instanceof AccountAwareStorageBackend<Subnet> aware
+                    ? aware.getForAccount(account, key(region, id)) : subnets.get(key(region, id))).orElse(null);
+            if (subnet != null) {
+                vpc = subnet.getVpcId();
+                context.put("ec2:SubnetID", id);
+                if (subnet.getAvailabilityZone() != null) {
+                    context.put("ec2:AvailabilityZone", subnet.getAvailabilityZone());
+                }
+            }
+        } else if ("security-group".equals(type)) {
+            SecurityGroup group = (securityGroups instanceof AccountAwareStorageBackend<SecurityGroup> aware
+                    ? aware.getForAccount(account, key(region, id)) : securityGroups.get(key(region, id))).orElse(null);
+            if (group != null) {
+                vpc = group.getVpcId();
+                context.put("ec2:SecurityGroupID", id);
+            }
+        }
+        if (vpc != null) {
+            context.put("ec2:Vpc", Arn.of("ec2", region, account, "vpc/" + vpc).toString());
+        }
+        return Map.copyOf(context);
+    }
+
+    @Override
+    public String namespace() {
+        return "ec2";
+    }
+
+    @Override
+    public Optional<String> find(String type, List<String> names, String region) {
+        return Optional.empty();
+    }
+
+    @Override
+    public List<String> through(String member, String value, String region) {
+        if (!"AttachmentId".equals(member) && !"NetworkInterfaceId".equals(member)) {
+            return List.of();
+        }
+        String account = callerAccountId();
+        List<NetworkInterface> scoped = networkInterfaces instanceof AccountAwareStorageBackend<NetworkInterface> aware
+                ? aware.scanForAccount(account, k -> k.startsWith(region + "::"))
+                : networkInterfaces.scan(k -> k.startsWith(region + "::"));
+        for (NetworkInterface ni : scoped) {
+            NetworkInterfaceAttachment attachment = ni.getAttachment();
+            if (attachment != null && "NetworkInterfaceId".equals(member) && value.equals(ni.getNetworkInterfaceId())) {
+                return List.of(Arn.of("ec2", region, account, "instance/" + attachment.getInstanceId()).toString());
+            }
+            if (attachment != null && "AttachmentId".equals(member) && value.equals(attachment.getAttachmentId())) {
+                return List.of(Arn.of("ec2", region, account, "network-interface/" + ni.getNetworkInterfaceId()).toString(),
+                        Arn.of("ec2", region, account, "instance/" + attachment.getInstanceId()).toString());
+            }
+        }
+        List<Instance> scopedInstances = instances instanceof AccountAwareStorageBackend<Instance> aware
+                ? aware.scanForAccount(account, k -> k.startsWith(region + "::"))
+                : instances.scan(k -> k.startsWith(region + "::"));
+        for (Instance instance : scopedInstances) {
+            if (instance.getState() != null && "terminated".equals(instance.getState().getName())) {
+                continue;
+            }
+            for (InstanceNetworkInterface ni : instance.getNetworkInterfaces()) {
+                if ("NetworkInterfaceId".equals(member) && value.equals(ni.getNetworkInterfaceId())) {
+                    return List.of(Arn.of("ec2", region, account, "instance/" + instance.getInstanceId()).toString());
+                }
+                if ("AttachmentId".equals(member) && value.equals(ni.getAttachmentId())) {
+                    return List.of(Arn.of("ec2", region, account, "network-interface/" + ni.getNetworkInterfaceId()).toString(),
+                            Arn.of("ec2", region, account, "instance/" + instance.getInstanceId()).toString());
+                }
+            }
+        }
+        return List.of();
     }
 
     /** The tags currently on one resource in {@code region}, as CreateTags and DeleteTags maintain them. */

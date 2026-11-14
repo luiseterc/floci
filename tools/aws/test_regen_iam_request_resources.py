@@ -1817,3 +1817,23 @@ def test_eip_operations_read_scalar_targets_from_models(operation, members, kind
     action = "ec2:" + operation
     entry = r.entry_for(action, {"action": action, "types": kinds}, formats, {"ec2": ec2})
     assert entry["resources"] == [{"type": kind, "fill": {variables[kind]: variables[kind]}} for kind in kinds]
+
+
+def test_nested_relationship_identity_reaches_parent_and_other_resource():
+    shapes = {
+        "NetworkInterface": {"type": "structure", "members": {
+            "NetworkInterfaceId": {"shape": "String"}, "Attachment": {"shape": "NetworkInterfaceAttachment"}}},
+        "NetworkInterfaceAttachment": {"type": "structure", "members": {
+            "AttachmentId": {"shape": "String"}, "InstanceId": {"shape": "String"}}},
+    }
+    formats = {"network-interface": "arn:${Partition}:ec2:${Region}:${Account}:network-interface/${NetworkInterfaceId}",
+               "instance": "arn:${Partition}:ec2:${Region}:${Account}:instance/${InstanceId}",
+               "transit-gateway-attachment": "arn:${Partition}:ec2:${Region}:${Account}:transit-gateway-attachment/${Id}"}
+    models = {"ec2": {"shapes": shapes}}
+    assert r.through_members(models, formats) == {"AttachmentId": ["instance", "network-interface"],
+                                                "NetworkInterfaceId": ["instance"]}
+    direct = [{"type": "instance", "fill": {"InstanceId": "InstanceId"}}]
+    assert r.with_through(direct, ["instance", "network-interface"], {"NetworkInterfaceId": "NetworkInterfaceId"},
+                          r.through_members(models, formats)) == direct
+    shapes["NetworkInterface"]["members"].pop("NetworkInterfaceId")
+    assert r.through_members(models, formats) == {}
