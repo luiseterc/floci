@@ -42,6 +42,8 @@ final class RequestResourceMembers {
      */
     private static final Pattern FILL_MEMBER = Pattern.compile("[A-Za-z][A-Za-z0-9_]*(\\[]|\\[]\\.[A-Za-z][A-Za-z0-9_]*"
             + "|\\{}\\.[A-Za-z][A-Za-z0-9_]*|\\.[A-Za-z][A-Za-z0-9_]*)?");
+    private static final Pattern PREPARED_MEMBER = Pattern.compile(
+            "[A-Za-z][A-Za-z0-9_]*(\\[])?(\\.[A-Za-z][A-Za-z0-9_]*(\\[])?)*");
     /** An ARN format's leading resource type word, and the rest of its resource. */
     private static final Pattern RESOURCE_PART = Pattern.compile(
             "^arn:\\$\\{Partition}:[^:]*:[^:]*:[^:]*:([A-Za-z][A-Za-z0-9-]*)(.*)$");
@@ -211,6 +213,7 @@ final class RequestResourceMembers {
      * query, {@code ?name}, by the member's name.
      */
     record Table(Map<String, List<Resource>> operations, Map<String, List<String>> types,
+                 Map<String, List<Resource>> prepared,
                  Map<String, List<Created>> creates, Map<String, List<Resource>> makes,
                  Map<String, Targets> targets,
                  Map<String, Map<Member, String>> ec2Query,
@@ -296,6 +299,7 @@ final class RequestResourceMembers {
             resourceTagKeys.put(namespace.getKey(), Map.copyOf(types));
         });
         Map<String, List<Resource>> entries = new LinkedHashMap<>();
+        Map<String, List<Resource>> prepared = new LinkedHashMap<>();
         Map<String, List<String>> actsOn = new LinkedHashMap<>();
         Map<String, List<Created>> creates = new LinkedHashMap<>();
         Map<String, List<Resource>> makes = new LinkedHashMap<>();
@@ -315,6 +319,20 @@ final class RequestResourceMembers {
             entries.put(operation.getKey(), List.copyOf(resources));
             List<String> types = operation.getValue().path("types").valueStream().map(JsonNode::asText).toList();
             actsOn.put(operation.getKey(), types);
+            if (operation.getValue().has("prepared")) {
+                if (!operation.getValue().path("prepared").isArray() || operation.getValue().path("prepared").isEmpty()) {
+                    throw new IllegalStateException(RESOURCE_NAME + " has no prepared selectors for " + operation.getKey());
+                }
+                List<Resource> projected = new ArrayList<>();
+                for (JsonNode rule : operation.getValue().path("prepared")) {
+                    Resource resource = resource(operation.getKey(), rule, formats.getOrDefault(namespace, Map.of()), true);
+                    if (!types.containsAll(resource.types())) {
+                        throw new IllegalStateException(RESOURCE_NAME + " prepares an unlisted resource type");
+                    }
+                    projected.add(resource);
+                }
+                prepared.put(operation.getKey(), List.copyOf(projected));
+            }
             List<Resource> made = new ArrayList<>();
             for (JsonNode resource : operation.getValue().path("makes")) {
                 if (!types.isEmpty() || !resource.isObject() || resource.size() != 2 || !resource.has("type")
@@ -388,7 +406,7 @@ final class RequestResourceMembers {
                 located.put(operation.getKey(), Map.copyOf(where));
             }
         });
-        return new Table(Map.copyOf(entries), Map.copyOf(actsOn), Map.copyOf(creates), Map.copyOf(makes),
+        return new Table(Map.copyOf(entries), Map.copyOf(actsOn), Map.copyOf(prepared), Map.copyOf(creates), Map.copyOf(makes),
                 Map.copyOf(targets), Map.copyOf(ec2Query), Map.copyOf(located), Map.copyOf(formats),
                 Map.copyOf(resourceTagKeys), namespaces,
                 names(document.path("handBuilt")),
@@ -401,6 +419,11 @@ final class RequestResourceMembers {
     }
 
     private static Resource resource(String operation, JsonNode resource, Map<String, ArnFormat> formats) {
+        return resource(operation, resource, formats, false);
+    }
+
+    private static Resource resource(String operation, JsonNode resource, Map<String, ArnFormat> formats,
+                                      boolean prepared) {
         if (resource.has("made") && !(resource.path("made").isBoolean() && resource.path("made").booleanValue())) {
             throw new IllegalStateException(RESOURCE_NAME + " marks a resource of " + operation + " made by "
                     + resource.path("made") + ", which is not true");
@@ -456,7 +479,8 @@ final class RequestResourceMembers {
                 throw new IllegalStateException(RESOURCE_NAME + " fills " + variable.getKey() + " for " + operation
                         + ", no variable of " + type + "'s format");
             }
-            fill.put(variable.getKey(), fillMember(operation, variable.getValue().asText("")));
+            fill.put(variable.getKey(), prepared ? preparedMember(operation, variable.getValue().asText(""))
+                    : fillMember(operation, variable.getValue().asText("")));
         });
         Map<String, String> fixed = new LinkedHashMap<>();
         resource.path("fixed").properties().forEach(variable -> {
@@ -593,6 +617,18 @@ final class RequestResourceMembers {
             throw new IllegalStateException(RESOURCE_NAME + " reads " + operation + " at " + path + ", which is no member");
         }
         return arnMember(operation, path);
+    }
+
+    private static Member preparedMember(String operation, String path) {
+        if (!PREPARED_MEMBER.matcher(path).matches()) {
+            throw new IllegalStateException(RESOURCE_NAME + " reads an invalid prepared member " + path);
+        }
+        int dot = path.indexOf('.');
+        if (dot < 0) {
+            return member(operation, path);
+        }
+        Member outer = member(operation, path.substring(0, dot));
+        return new Member(outer.name(), outer.list(), preparedMember(operation, path.substring(dot + 1)));
     }
 
     /**

@@ -1656,3 +1656,50 @@ def test_network_tag_prefixes_do_not_promote_typed_launch_inputs():
     assert "targets" not in r.entry_for("ec2:Launch", upstream, formats, {"ec2": ec2})
     tags = r.entry_for("ec2:AnnotateResources", {**upstream, "action": "ec2:AnnotateResources"}, formats, {"ec2": ec2})
     assert tags["targets"]["prefixes"] == {"security-group": "sg-"}
+
+
+def test_prepared_launch_selectors_follow_nested_sdk_shapes_without_placement_group_confusion():
+    ec2 = model({"RunInstances": {"Placement": "Placement", "LaunchTemplate": "Template"}}, "ec2")
+    ec2["shapes"].update({
+        "Placement": {"type": "structure", "members": {
+            "GroupId": {"shape": "String", "documentation": "The ID of the placement group."},
+            "GroupName": {"shape": "String", "documentation": "The name of the placement group."}}},
+        "Template": {"type": "structure", "members": {"LaunchTemplateId": {"shape": "String"}}},
+        "Output": {"type": "structure", "members": {"Instances": {"shape": "Instances"}}},
+        "Instances": {"type": "list", "member": {"shape": "Instance"}},
+        "Instance": {"type": "structure", "members": {
+            "InstanceId": {"shape": "String"}, "ImageId": {"shape": "String"},
+            "SecurityGroups": {"shape": "Groups"}, "BlockDeviceMappings": {"shape": "Devices"}}},
+        "Groups": {"type": "list", "member": {"shape": "Group"}},
+        "Group": {"type": "structure", "members": {
+            "GroupId": {"shape": "String", "documentation": "The ID of the security group."},
+            "GroupName": {"shape": "String", "documentation": "The name of the security group."}}},
+        "Devices": {"type": "list", "member": {"shape": "Device"}},
+        "Device": {"type": "structure", "members": {"Ebs": {"shape": "Ebs"}}},
+        "Ebs": {"type": "structure", "members": {"VolumeId": {"shape": "String"}}},
+    })
+    ec2["operations"]["RunInstances"]["output"] = {"shape": "Output"}
+    formats = {kind: f"arn:${{Partition}}:ec2:${{Region}}:${{Account}}:{kind}/${{{variable}}}"
+               for kind, variable in [("image", "ImageId"), ("instance", "InstanceId"),
+                                      ("volume", "VolumeId"), ("security-group", "SecurityGroupId"),
+                                      ("placement-group", "PlacementGroupName"), ("group", "GroupName"),
+                                      ("launch-template", "LaunchTemplateId"), ("elastic-gpu", "ElasticGpuId")]}
+    resources = r.prepared_resources("ec2:RunInstances", list(formats), formats, {"ec2": ec2})
+    assert {resource["type"] for resource in resources} == {
+        "image", "instance", "volume", "security-group", "placement-group", "launch-template"}
+    assert {"type": "volume", "fill": {
+        "VolumeId": "output.Instances[].BlockDeviceMappings[].Ebs.VolumeId"}} in resources
+    assert {"type": "security-group", "fill": {
+        "SecurityGroupId": "output.Instances[].SecurityGroups[].GroupId"}} in resources
+    assert not any("Placement.GroupId" in path for resource in resources for path in resource["fill"].values())
+    # The Service Reference remains authoritative even when the SDK describes another identifier.
+    assert r.prepared_resources("ec2:RunInstances", ["image"], formats, {"ec2": ec2}) == [
+        {"type": "image", "fill": {"ImageId": "output.Instances[].ImageId"}}]
+
+
+def test_prepared_rules_reject_unlisted_resource_types_and_unapproved_operations():
+    document = json.loads((Path(__file__).parents[2] / "src/main/resources/aws/iam-request-resources.json").read_text())
+    entry = document["operations"]["ec2:RunInstances"]
+    assert entry["prepared"]
+    entry["prepared"].append({"type": "vpc", "fill": {"VpcId": "output.VpcId"}})
+    assert r.validate(document)

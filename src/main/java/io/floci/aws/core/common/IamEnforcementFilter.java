@@ -217,6 +217,9 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
     private final Clock clock;
     private final ResourceInfo resourceInfo;
     private final Instance<S3Service> s3ServiceProvider;
+    @Inject
+    Instance<RequestPreparation> requestPreparations;
+
 
     @Inject
     public IamEnforcementFilter(EmulatorConfig config,
@@ -490,6 +493,17 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
             caller = caller.withScpLevels(scpLevels);
         }
 
+        if (requestPreparations != null) {
+            for (RequestPreparation preparation : requestPreparations) {
+                if (preparation.operation().equals(resolvedAuthorization.operation())) {
+                    PreparedRequest prepared = preparation.prepare(ctx, region);
+                    ctx.setProperty(PreparedRequest.PROPERTY, prepared);
+                    requestContext.setPreparedRequest(prepared);
+                    break;
+                }
+            }
+        }
+
         List<String> resources = resolveResourceArns(credentialScope,
                 targetResources(credentialScope, action, resolvedAuthorization.operation(), ctx, region, accountId));
 
@@ -577,7 +591,8 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
         // A create that carries tags is checked with them where its own action takes them, as the tagging
         // action it also needs is (see TagOnCreate); keys the service's own resolver gives are kept.
         Optional<TagOnCreate.Tagging> tagOnCreate = TagOnCreate.of(resolvedAuthorization.operation(), ctx);
-        List<Map<String, List<String>>> requestTags = tagOnCreate.filter(TagOnCreate.Tagging::requestTags)
+        List<Map<String, List<String>>> requestTags = tagOnCreate
+                .filter(ignored -> PreparedRequest.from(ctx) == null).filter(TagOnCreate.Tagging::requestTags)
                 .map(TagOnCreate::requestTagContexts).orElse(List.of());
         List<Map<String, List<String>>> targetContexts = withRequestTags(conditionContext, requestTags);
         for (Map<String, List<String>> target : remainingTargets) {
@@ -1293,6 +1308,7 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
                     taggedContext = conditionContextResolver.withEc2ResourceTags(
                             credentialScope, operationAction, resource, region, accountId, targetContext);
                 }
+                taggedContext = PreparedRequest.withContext(ctx, operationAction, resource, taggedContext);
                 Map<String, List<String>> effectiveContext = IamConditionContextResolver.withGlobalContext(
                         taggedContext, resource, region, accountId, resourceOwnerAccountId, action);
                 ResourcePolicyDecision resourcePolicyDecision = evaluator.evaluateResourcePolicyFor(

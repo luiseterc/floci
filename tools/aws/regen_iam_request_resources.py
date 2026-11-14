@@ -138,7 +138,11 @@ Beyond the members' names, botocore's shapes and documentation say what a member
 What a request names, this file alone says. A service only looks up what it holds where an entry asks it to
 (`StoredResourceArns`): the resource the members a `find` gives name, the ones a `through` member reaches, and the
 resource its handler uses for a member left out (Athena's `primary` workgroup, EventBridge's `default` bus). No
-service says what an operation acts on.
+service says what an operation acts on. Operations in `PREPARED_OPERATIONS` supply modeled effective
+inputs and a read-only output projection, including inherited/default references and '*' identifiers
+for resources allocated only after authorization. Their `prepared` selectors are derived recursively
+from botocore's input/output shapes and documentation, limited to types listed by the Service Reference.
+The service supplies values, never an operation-to-resource mapping or a list of authorization ARNs.
 
 `MEASURED` holds what AWS was measured to check where neither botocore nor the Service Reference says it, and
 nothing else. It is the only part of the file stated by hand, and an entry is admitted only with evidence that AWS
@@ -1730,6 +1734,55 @@ def id_targets(operation: str, types: list[str], formats: dict[str, str], models
     return found
 
 
+# Operations whose service supplies an effective input and a read-only output projection before
+# authorization. Admission selects a resolver, never resource types or member paths: those are
+# derived below from the same Service Reference and botocore shapes as ordinary request resources.
+PREPARED_OPERATIONS = {"ec2:RunInstances"}
+
+
+def prepared_resources(operation: str, types: list[str], formats: dict[str, str],
+                       models: dict[str, dict]) -> list[dict]:
+    """Read identifiers from modeled effective inputs and planned outputs, including nested lists.
+
+    A service projects only the resources it will actually use or create. Missing members name
+    nothing; an id allocated on execution is projected as '*'. Documentation disambiguates short
+    names: SecurityGroups[].GroupId names a security-group, Placement.GroupId does not.
+    """
+    found = set()
+    for model in models.values():
+        spec = model["operations"].get(operation.split(":", 1)[1], {})
+        leaves = []
+
+        def walk(shape_name, path, documentation="", visited=frozenset()):
+            if shape_name in visited:
+                return
+            shape = model["shapes"][shape_name]
+            if shape["type"] == "string":
+                leaves.append((path, _lead(documentation or shape.get("documentation"))))
+            elif shape["type"] == "list":
+                walk(shape["member"]["shape"], path + "[]", documentation, visited | {shape_name})
+            elif shape["type"] == "structure":
+                for name, member in shape.get("members", {}).items():
+                    walk(member["shape"], path + "." + name, member.get("documentation", ""),
+                         visited | {shape_name})
+
+        for side in ("input", "output"):
+            if side in spec:
+                walk(spec[side]["shape"], side)
+        for kind in types:
+            variables = set(VARIABLE_RE.findall(formats.get(kind, ""))) - KNOWN_VARIABLES
+            if len(variables) != 1:
+                continue
+            variable = next(iter(variables))
+            for path, lead in leaves:
+                documented = {candidate for candidate in types if doc_names(lead, candidate, formats)}
+                field = path.rsplit(".", 1)[-1].removesuffix("[]")
+                exact = field == variable and not (documented - {kind})
+                if exact or kind in documented and doc_kind(lead) == kind_of(variable):
+                    found.add((kind, variable, path))
+    return [{"type": kind, "fill": {variable: path}} for kind, variable, path in sorted(found)]
+
+
 def ec2_query_members(operation: str, models: dict[str, dict], named: set[str]) -> dict[str, str]:
     """Wire names for the top-level EC2 members the rules read. EC2 lists use Name.N,
     unlike Query's Name.member.N; locationName/queryName can also rename a member."""
@@ -1765,6 +1818,8 @@ def entry_for(operation: str, upstream: dict, formats: dict[str, str], models: d
                    and values and all(only_arn(value) for value in values)}
     if namespace_of(operation) in ID_TARGETS and operation not in READ_IN_ID_TARGETS:
         entry = {"action": upstream["action"], "types": types, "resources": []}
+        if operation in PREPARED_OPERATIONS:
+            entry["prepared"] = prepared_resources(operation, types, formats, models)
         targets = id_targets(operation, types, formats, models)
         if targets is not None:
             entry["targets"] = targets
@@ -2266,6 +2321,7 @@ PATH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\[])?$")
 # value for each.
 FILL_PATH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\[]|\[]\.[A-Za-z][A-Za-z0-9_]*|\{}\.[A-Za-z][A-Za-z0-9_]*"
                           r"|\.[A-Za-z][A-Za-z0-9_]*)?$")
+PREPARED_PATH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\[])?(\.[A-Za-z][A-Za-z0-9_]*(\[])?)*$")
 # ARN paths can traverse structures, array elements ([]) and map values ({}).
 ARN_PATH_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9_]*(\[])?(\.[A-Za-z][A-Za-z0-9_]*(\[])?)?"
                          r"|[A-Za-z][A-Za-z0-9_]*\{\}(\.[A-Za-z][A-Za-z0-9_]*){1,2})$")
@@ -2324,7 +2380,7 @@ def validate(document: dict) -> list[str]:
             problems.append(f"{operation!r} is not an operation of a namespace the file reads")
             continue
         if not isinstance(entry, dict) or not {"action", "types", "resources"} <= set(entry) <= {
-                "action", "types", "resources", "creates", "makes", "located", "targets", "ec2Query"}:
+                "action", "types", "resources", "creates", "makes", "located", "targets", "ec2Query", "prepared"}:
             problems.append(f"{operation} is not an action, its types and its resources")
             continue
         if not isinstance(entry["action"], str) or not OPERATION_RE.match(entry["action"]) \
@@ -2339,6 +2395,12 @@ def validate(document: dict) -> list[str]:
             # (see `measured_resources`) say when it may.
             measured = set(_kinds(resource)) if isinstance(resource, dict) and operation in MEASURED else set()
             problems += _resource_problems(operation, resource, set(types) | measured, formats.get(namespace, {}))
+        if "prepared" in entry:
+            if operation not in PREPARED_OPERATIONS or not isinstance(entry["prepared"], list) or not entry["prepared"]:
+                problems.append(f"{operation} has unsupported prepared resources")
+            else:
+                for resource in entry["prepared"]:
+                    problems += _resource_problems(operation, resource, set(types), formats.get(namespace, {}), prepared=True)
         for created in entry.get("creates", []) if isinstance(entry.get("creates", []), list) else [None]:
             problems += _created_problems(operation, created, set(types), formats.get(namespace, {}))
         for made in entry.get("makes", []) if isinstance(entry.get("makes", []), list) else [None]:
@@ -2380,7 +2442,8 @@ def validate(document: dict) -> list[str]:
     return problems
 
 
-def _resource_problems(operation: str, resource: object, types: set[str], formats: dict[str, str]) -> list[str]:
+def _resource_problems(operation: str, resource: object, types: set[str], formats: dict[str, str],
+                       prepared: bool = False) -> list[str]:
     if not isinstance(resource, dict) or not ({"types", "arn"} <= set(resource) <= {"types", "arn", "made", "endpoint"}
                                               or {"types", "through"} <= set(resource) <= {"types", "through", "when",
                                                                                             "endpoint"}
@@ -2423,7 +2486,8 @@ def _resource_problems(operation: str, resource: object, types: set[str], format
                 f"or members reading it otherwise"]
     variables = set(VARIABLE_RE.findall(formats[kinds[0]])) - KNOWN_VARIABLES
     if not isinstance(fill, dict) or set(fill) - variables or not all(
-            isinstance(path, str) and FILL_PATH_RE.match(path) for path in fill.values()):
+            isinstance(path, str) and (PREPARED_PATH_RE if prepared else FILL_PATH_RE).match(path)
+            for path in fill.values()):
         return [f"{operation} fills {fill!r}, which are no variables of {kinds[0]}'s ARN by members"]
     if sum("[]" in path or "{}" in path for path in fill.values()) > 1:
         return [f"{operation} fills {kinds[0]} from more than one list"]

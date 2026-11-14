@@ -99,6 +99,11 @@ public final class RequestResources {
     public static List<String> of(String operation, ContainerRequestContext ctx, String partition, String region,
                                   String accountId, StoredResourceArns stored, Map<String, String> labels) {
         RequestResourceMembers.Table table = RequestResourceMembers.table();
+        PreparedRequest prepared = PreparedRequest.from(ctx);
+        if (prepared != null && table.prepared().containsKey(operation)) {
+            return named(operation, table.prepared().get(operation), formats(table, operation), Map.of(),
+                    prepared.model(), partition, region, accountId, stored);
+        }
         RequestResourceMembers.Targets targets = operation == null ? null : table.targets().get(operation);
         if (targets != null) {
             Map<String, String> form = IamConditionContextResolver.formParameters(ctx);

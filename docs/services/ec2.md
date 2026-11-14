@@ -229,6 +229,21 @@ CloudFormation `AWS::EC2::LaunchTemplate` stores `LaunchTemplateData.MetadataOpt
 
 An `AWS::EC2::Instance` that declares no `IamInstanceProfile` launches with the profile of the launch template it names, as `RunInstances` does, and its own `IamInstanceProfile` wins when it declares one. A template profile that IAM does not know fails the instance with `InvalidParameterValue`. A stack update that moves the instance to a template version naming another profile, or none, changes or removes the instance's profile in place, the same way it applies the version's `MetadataOptions`, and a stack rollback puts the previous profile back, whether the instance declared it or its launch template did.
 
+## IAM authorization for instance launches
+
+With IAM enforcement enabled, `RunInstances` resolves its effective launch-template inputs and
+network placement before checking resource permissions. The generated IAM table reads the AMI,
+instance, subnet, every security group, network interface and EBS volumes from that plan, plus
+optional references such as the launch template, key pair and explicitly requested snapshots.
+Existing interfaces contribute their actual subnet and groups. Missing permissions or an explicit
+deny on any resolved target reject the launch before allocating instances or volumes.
+
+Instance, volume and network-interface tags are checked separately, including inherited template
+tags and request overrides. Tagged launches also require `ec2:CreateTags` with
+`ec2:CreateAction=RunInstances`; each created EBS volume receives its volume tags. AMI owner conditions
+use catalog or registered-image ownership, not request fields. A change to resolved networking,
+image ownership or the volume plan before execution rejects the request and asks the caller to retry.
+
 ## Instance Metadata Service (IMDS)
 
 Floci runs an IMDS-compatible HTTP server on port `9169` of the host. Each launched container receives the environment variable `AWS_EC2_METADATA_SERVICE_ENDPOINT` pointing to this server.

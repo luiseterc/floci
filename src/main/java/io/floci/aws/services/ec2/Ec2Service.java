@@ -4029,60 +4029,14 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
                 LaunchTemplateData.MetadataOptions.launchDefaults(), metadataOptions);
         ensureDefaultResources(region);
 
-        // floci-kt9: a caller-supplied primary ENI (override-default-eni) governs its own
-        // subnet/VPC/security-groups and can only ever back a single instance.
-        NetworkInterface suppliedEni = null;
-        if (networkInterfaceId != null && !networkInterfaceId.isBlank()) {
-            if (Math.max(minCount, 1) > 1) {
-                throw new AwsException("InvalidParameterCombination",
-                        "Network interfaces may only be specified for a single instance.", 400);
-            }
-            suppliedEni = takeNetworkInterfaceForLaunch(region, networkInterfaceId);
-            subnetId = suppliedEni.getSubnetId();
-        }
-
-        // Resolve subnet
-        Subnet subnet = null;
-        if (subnetId != null && !subnetId.isEmpty()) {
-            subnet = requireSubnet(region, subnetId);
-            if (availabilityZone != null && !availabilityZone.isBlank()
-                    && !availabilityZone.equals(subnet.getAvailabilityZone())) {
-                throw new AwsException("InvalidParameterCombination",
-                        "The subnet '" + subnetId + "' is not in availability zone '"
-                                + availabilityZone + "'.",
-                        400);
-            }
-        } else if (availabilityZone != null && !availabilityZone.isBlank()) {
-            subnet = resolveSubnetForAvailabilityZone(region, availabilityZone);
-        } else {
-            // Pick first default subnet
-            subnet = subnets.scan(k -> true).stream()
-                    .filter(s -> s.getRegion().equals(region) && s.isDefaultForAz())
-                    .findFirst()
-                    .orElse(null);
-        }
-
-        String vpcId = subnet != null ? subnet.getVpcId() : resolveDefaultVpcId(region);
-        String az = subnet != null ? subnet.getAvailabilityZone()
-                : availabilityZone != null && !availabilityZone.isBlank() ? availabilityZone : region + "a";
-        String finalSubnetId = subnet != null ? subnet.getSubnetId() : null;
-
-        // Resolve security groups
-        List<GroupIdentifier> sgIdentifiers = new ArrayList<>();
-        if (suppliedEni != null) {
-            // AWS ignores instance-level SecurityGroupId when a network interface is supplied;
-            // the interface's own groups win (module main.tf sets vpc_security_group_ids = null
-            // in this case, so there is nothing to conflict with in practice).
-            sgIdentifiers.addAll(suppliedEni.getGroups());
-        } else if (securityGroupIds != null && !securityGroupIds.isEmpty()) {
-            for (String sgId : securityGroupIds) {
-                SecurityGroup sg = getRequiredSecurityGroup(region, sgId);
-                sgIdentifiers.add(new GroupIdentifier(sg.getGroupId(), sg.getGroupName()));
-            }
-        } else {
-            defaultSecurityGroupOf(region, vpcId).ifPresent(defaultSg ->
-                    sgIdentifiers.add(new GroupIdentifier(defaultSg.getGroupId(), defaultSg.getGroupName())));
-        }
+        LaunchNetwork network = resolveLaunchNetwork(region, subnetId, securityGroupIds,
+                networkInterfaceId, availabilityZone, minCount);
+        NetworkInterface suppliedEni = network.suppliedInterface();
+        Subnet subnet = network.subnet();
+        String vpcId = network.vpcId();
+        String az = network.availabilityZone();
+        String finalSubnetId = subnet == null ? null : subnet.getSubnetId();
+        List<GroupIdentifier> sgIdentifiers = network.groups();
 
         String reservationId = "r-" + randomHex(17);
         Reservation reservation = new Reservation();
@@ -4183,6 +4137,14 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
                 throw dryRunOperation();
             }
             synchronized (attachmentTopologyLock(region)) {
+                Ec2LaunchPreparation.Launch authorized = preparedLaunch();
+                if (authorized != null) {
+                    LaunchNetwork current = resolveLaunchNetwork(region, subnetId, securityGroupIds,
+                            networkInterfaceId, availabilityZone, minCount);
+                    String imageOwner = launchImageOwner(image);
+                    authorized.verify(current, imageOwner, launchVolumes);
+                    authorized.verify(network, imageOwner, launchVolumes);
+                }
                 if (finalSubnetId != null) {
                     requireSubnet(region, finalSubnetId);
                 }
@@ -9117,7 +9079,7 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
     }
 
     /** One EBS volume a launch creates, settled before anything of the launch is stored. */
-    private record LaunchVolume(String deviceName, String snapshotId, int size, String volumeType,
+    public record LaunchVolume(String deviceName, String snapshotId, int size, String volumeType,
                                 int iops, Integer throughput, boolean encrypted, String kmsKeyId,
                                 boolean deleteOnTermination) {}
 
@@ -9299,6 +9261,183 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
     private static boolean describesVolume(EbsBlockDevice ebs) {
         return ebs != null && (ebs.getSnapshotId() != null || ebs.getVolumeSize() != null
                 || ebs.getVolumeType() != null || ebs.getDeleteOnTermination() != null || ebs.getEncrypted() != null);
+    }
+
+    Ec2LaunchPreparation.Launch preparedLaunch() {
+        if (requestContextInstance == null || !requestContextInstance.isResolvable()) {
+            return null;
+        }
+        try {
+            return requestContextInstance.get().getPreparedRequest() instanceof Ec2LaunchPreparation.Launch launch
+                    ? launch : null;
+        } catch (ContextNotActiveException ignored) {
+            return null;
+        }
+    }
+
+    /** Placement facts used both for a launch preview and for execution, without initializing resources. */
+    public record LaunchNetwork(Subnet subnet, NetworkInterface suppliedInterface, String vpcId,
+                                String availabilityZone, List<GroupIdentifier> groups) {
+        public LaunchNetwork {
+            groups = List.copyOf(groups);
+        }
+    }
+
+    private LaunchNetwork resolveLaunchNetwork(String region, String subnetId, List<String> securityGroupIds,
+                                                String networkInterfaceId, String availabilityZone, int minCount) {
+        // A first concurrent request may be midway through lazy network seeding. Preview waits
+        // for that seed just as execution does, without initiating one itself.
+        synchronized (seededAccountRegions) {
+            return resolveLaunchNetworkLocked(region, subnetId, securityGroupIds, networkInterfaceId,
+                    availabilityZone, minCount);
+        }
+    }
+
+    private LaunchNetwork resolveLaunchNetworkLocked(String region, String subnetId, List<String> securityGroupIds,
+                                                      String networkInterfaceId, String availabilityZone, int minCount) {
+        // floci-kt9: a caller-supplied primary ENI (override-default-eni) governs its own
+        // subnet/VPC/security-groups and can only ever back a single instance.
+        NetworkInterface suppliedEni = null;
+        if (networkInterfaceId != null && !networkInterfaceId.isBlank()) {
+            if (Math.max(minCount, 1) > 1) {
+                throw new AwsException("InvalidParameterCombination",
+                        "Network interfaces may only be specified for a single instance.", 400);
+            }
+            suppliedEni = takeNetworkInterfaceForLaunch(region, networkInterfaceId);
+            subnetId = suppliedEni.getSubnetId();
+        }
+
+        String subnetIdValue = subnetId;
+        // Resolve subnet
+        Subnet subnet = null;
+        if (subnetId != null && !subnetId.isEmpty()) {
+            subnet = launchSubnets(region).stream().filter(candidate -> subnetIdValue.equals(candidate.getSubnetId()))
+                    .findFirst().orElseThrow(() -> new AwsException("InvalidSubnetID.NotFound",
+                            "The subnet ID '" + subnetIdValue + "' does not exist", 400));
+            if (availabilityZone != null && !availabilityZone.isBlank()
+                    && !availabilityZone.equals(subnet.getAvailabilityZone())) {
+                throw new AwsException("InvalidParameterCombination",
+                        "The subnet '" + subnetId + "' is not in availability zone '"
+                                + availabilityZone + "'.",
+                        400);
+            }
+        } else if (availabilityZone != null && !availabilityZone.isBlank()) {
+            subnet = launchSubnets(region).stream()
+                    .filter(candidate -> availabilityZone.equals(candidate.getAvailabilityZone()))
+                    .sorted(Comparator.comparing(Subnet::isDefaultForAz).reversed().thenComparing(Subnet::getSubnetId))
+                    .findFirst().orElseThrow(() -> new AwsException("InvalidAvailabilityZone.NotFound",
+                            "The availability zone '" + availabilityZone + "' has no subnet in this region.", 400));
+        } else {
+            // Pick first default subnet
+            subnet = launchSubnets(region).stream()
+                    .filter(s -> s.getRegion().equals(region) && s.isDefaultForAz())
+                    .sorted(Comparator.comparing(Subnet::getSubnetId))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        String vpcId = subnet != null ? subnet.getVpcId() : resolveDefaultVpcId(region);
+        String az = subnet != null ? subnet.getAvailabilityZone()
+                : availabilityZone != null && !availabilityZone.isBlank() ? availabilityZone : region + "a";
+
+        // Resolve security groups
+        List<GroupIdentifier> sgIdentifiers = new ArrayList<>();
+        if (suppliedEni != null) {
+            // AWS ignores instance-level SecurityGroupId when a network interface is supplied;
+            // the interface's own groups win (module main.tf sets vpc_security_group_ids = null
+            // in this case, so there is nothing to conflict with in practice).
+            sgIdentifiers.addAll(suppliedEni.getGroups());
+        } else if (securityGroupIds != null && !securityGroupIds.isEmpty()) {
+            for (String sgId : securityGroupIds) {
+                SecurityGroup sg = wouldSeedDefaultNetwork(region) && defaultSecurityGroupId(region).equals(sgId)
+                        ? launchDefaultSecurityGroup(region, defaultVpcId(region)).orElseThrow()
+                        : getRequiredSecurityGroup(region, sgId);
+                sgIdentifiers.add(new GroupIdentifier(sg.getGroupId(), sg.getGroupName()));
+            }
+        } else {
+            launchDefaultSecurityGroup(region, vpcId).ifPresent(defaultSg ->
+                    sgIdentifiers.add(new GroupIdentifier(defaultSg.getGroupId(), defaultSg.getGroupName())));
+        }
+
+        return new LaunchNetwork(subnet, suppliedEni, vpcId, az, sgIdentifiers);
+    }
+
+    private boolean wouldSeedDefaultNetwork(String region) {
+        return !seededAccountRegions.contains(callerAccountId() + "::" + region)
+                && vpcs.scan(k -> k.startsWith(region + "::")).isEmpty();
+    }
+
+    private List<Subnet> launchSubnets(String region) {
+        if (!wouldSeedDefaultNetwork(region)) {
+            return subnets.scan(k -> k.startsWith(region + "::"));
+        }
+        // Fresh namespaces are seeded lazily only after authorization. Describe the same deterministic
+        // subnet identities here without writing storage or creating Docker networks.
+        List<Subnet> defaults = new ArrayList<>();
+        for (String suffix : MODELLED_ZONE_SUFFIXES) {
+            Subnet subnet = new Subnet();
+            subnet.setSubnetId(defaultSubnetId(region, suffix));
+            subnet.setVpcId(defaultVpcId(region));
+            subnet.setRegion(region);
+            subnet.setAvailabilityZone(region + suffix);
+            subnet.setDefaultForAz(true);
+            defaults.add(subnet);
+        }
+        return defaults;
+    }
+
+    private Optional<SecurityGroup> launchDefaultSecurityGroup(String region, String vpcId) {
+        if (wouldSeedDefaultNetwork(region) && defaultVpcId(region).equals(vpcId)) {
+            SecurityGroup group = new SecurityGroup();
+            group.setGroupId(defaultSecurityGroupId(region));
+            group.setGroupName("default");
+            return Optional.of(group);
+        }
+        getRequiredVpc(region, vpcId);
+        return securityGroups.scan(k -> k.startsWith(region + "::")).stream()
+                .filter(group -> vpcId.equals(group.getVpcId()) && "default".equals(group.getGroupName()))
+                .findFirst();
+    }
+
+    /** Trusted image, placement and EBS facts, before a launch writes any resource. */
+    public record LaunchPreview(LaunchNetwork network, String imageOwner, String imageOwnerId,
+                                List<LaunchVolume> volumes) {
+        public LaunchPreview {
+            volumes = List.copyOf(volumes);
+        }
+    }
+
+    public LaunchPreview previewRunInstances(String region, Ec2RunInstancesRequest request) {
+        if (request.imageId() == null || request.imageId().isBlank()) {
+            throw new AwsException("MissingParameter", "The request must contain the parameter ImageId", 400);
+        }
+        String availabilityZone = null;
+        if (request.hostId() != null && !request.hostId().isBlank()
+                && (request.subnetId() == null || request.subnetId().isBlank())
+                && (request.networkInterfaceId() == null || request.networkInterfaceId().isBlank())) {
+            availabilityZone = getRequiredAvailableHost(region, request.hostId()).getAvailabilityZone();
+        }
+        LaunchNetwork network = resolveLaunchNetwork(region, request.subnetId(), request.securityGroupIds(),
+                request.networkInterfaceId(), availabilityZone, request.minCount());
+        synchronized (imageRegistryLock) {
+            requireNotDeregistered(region, request.imageId());
+            Image image = findImageForCapture(region, request.imageId());
+            String root = image != null && image.getRootDeviceName() != null
+                    ? image.getRootDeviceName() : new Instance().getRootDeviceName();
+            String ownerId = image == null ? null : image.getOwnerId();
+            String owner = launchImageOwner(image);
+            return new LaunchPreview(network, owner, ownerId,
+                    planLaunchVolumes(region, image, root, request.blockDeviceMappings()));
+        }
+    }
+
+    private static String launchImageOwner(Image image) {
+        if (image == null) {
+            return null;
+        }
+        String alias = image.getImageOwnerAlias();
+        return alias != null && Set.of("amazon", "aws-marketplace", "aws-backup-vault").contains(alias)
+                ? alias : image.getOwnerId();
     }
 
     /** The image a CreateImage source was launched from, whether catalog-backed or registered. */
@@ -10099,6 +10238,13 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
     public LaunchTemplateData resolveLaunchTemplateData(String region, String id, String name, String version,
                                                         boolean decodeUserData) {
         ensureDefaultResources(region);
+        return prepareLaunchTemplate(region, id, name, version, decodeUserData).data();
+    }
+
+    public record PreparedLaunchTemplate(String id, LaunchTemplateData data) {}
+
+    public PreparedLaunchTemplate prepareLaunchTemplate(String region, String id, String name, String version,
+                                                        boolean decodeUserData) {
         LaunchTemplate launchTemplate = findLaunchTemplate(region, id, name);
         synchronized (launchTemplate) {
             String resolvedVersion = resolveLaunchTemplateVersion(
@@ -10109,7 +10255,7 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
             if (decodeUserData) {
                 data.setUserData(Ec2UserDataDecoder.decodeIfMissing(data.getUserData(), data.getEncodedUserData()));
             }
-            return data;
+            return new PreparedLaunchTemplate(launchTemplate.getLaunchTemplateId(), data);
         }
     }
 

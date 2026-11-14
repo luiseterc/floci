@@ -778,7 +778,8 @@ public class Ec2QueryHandler {
 
     // ─── Instance handlers ────────────────────────────────────────────────────
 
-    private Response handleRunInstances(MultivaluedMap<String, String> p, String region) {
+    /** Resolve the wire request and launch-template defaults without launching or tagging resources. */
+    public Ec2RunInstancesRequest prepareRunInstances(MultivaluedMap<String, String> p, String region) {
         String imageId = p.getFirst("ImageId");
         String instanceType = p.getFirst("InstanceType");
         int minCount = parseRunInstancesCount(p, "MinCount");
@@ -845,6 +846,7 @@ public class Ec2QueryHandler {
         // ResourceType=network-interface specification - never by the instance's own tags.
         List<Tag> instanceTags = parseTagsForResource(p, "instance");
         List<Tag> networkInterfaceTags = parseTagsForResource(p, "network-interface");
+        List<Tag> volumeTags = parseTagsForResource(p, "volume");
         // Resolved after tag parsing so reserved tags are refused before any service call.
         String iamInstanceProfileArn = service.resolveLaunchIamInstanceProfileArn(
                 p.getFirst("IamInstanceProfile.Name"), p.getFirst("IamInstanceProfile.Arn"));
@@ -857,8 +859,9 @@ public class Ec2QueryHandler {
         List<LaunchTemplateData.BlockDeviceMapping> blockDeviceMappings =
                 parseLaunchTemplateBlockDeviceMappings(p, "");
 
-        LaunchTemplateData launchTemplateData = resolveRunInstancesLaunchTemplateData(
+        Ec2Service.PreparedLaunchTemplate template = prepareRunInstancesLaunchTemplate(
                 p, region, userDataEncoded == null || userDataEncoded.isBlank());
+        LaunchTemplateData launchTemplateData = template == null ? null : template.data();
         boolean suppliedInterfaces = p.keySet().stream().anyMatch(name -> name.startsWith("NetworkInterface."));
         boolean anyInterfaces = suppliedInterfaces
                 || launchTemplateData != null && !launchTemplateData.getNetworkInterfaces().isEmpty();
@@ -920,12 +923,10 @@ public class Ec2QueryHandler {
             if (sgIds.isEmpty()) {
                 sgIds = new ArrayList<>(launchTemplateData.effectiveSecurityGroupIds());
             }
-            if (!launchTemplateData.getInstanceTags().isEmpty()) {
-                Map<String, Tag> mergedTags = new LinkedHashMap<>();
-                launchTemplateData.getInstanceTags().forEach(tag -> mergedTags.put(tag.getKey(), tag));
-                instanceTags.forEach(tag -> mergedTags.put(tag.getKey(), tag));
-                instanceTags = new ArrayList<>(mergedTags.values());
-            }
+            instanceTags = mergeLaunchTags(launchTemplateData.getInstanceTags(), instanceTags);
+            networkInterfaceTags = mergeLaunchTags(launchTemplateData.tagsForResource("network-interface"),
+                    networkInterfaceTags);
+            volumeTags = mergeLaunchTags(launchTemplateData.tagsForResource("volume"), volumeTags);
         }
 
         LaunchTemplateData.CapacityReservationSpecification capacitySpecification = launchTemplateData == null
@@ -944,13 +945,6 @@ public class Ec2QueryHandler {
             }
         }
 
-        Reservation res = service.runInstances(region, imageId, instanceType, minCount, maxCount,
-                keyName, sgIds, subnetId, clientToken, instanceTags, userData, iamInstanceProfileArn,
-                associatePublicIp, networkInterfaceId, networkInterfaceDeviceIndex, null, metadataOptions,
-                creditSpecificationCpuCredits, userDataEncoded, dryRun(p),
-                p.getFirst("Placement.HostId"), p.getFirst("Placement.Tenancy"), blockDeviceMappings,
-                "spot".equals(marketType), privateIpAddress, capacitySpecification);
-
         // The request's EbsOptimized wins over a launch template's. Applied after the launch, on this
         // API path only: CloudFormation, Auto Scaling and Fleet launches still read false. Passing it
         // into Ec2Service.runInstances would cover all of them.
@@ -958,22 +952,25 @@ public class Ec2QueryHandler {
         if (ebsOptimized == null && launchTemplateData != null) {
             ebsOptimized = launchTemplateData.getEbsOptimized();
         }
-        if (ebsOptimized != null) {
-            for (Instance inst : res.getInstances()) {
-                service.modifyInstanceAttribute(region, inst.getInstanceId(), "ebsOptimized", ebsOptimized.toString());
-                inst.setEbsOptimized(ebsOptimized);
-            }
-        }
+        return new Ec2RunInstancesRequest(imageId, instanceType, minCount, maxCount, keyName, sgIds,
+                subnetId, clientToken, instanceTags, userData, iamInstanceProfileArn, associatePublicIp,
+                networkInterfaceId, networkInterfaceDeviceIndex, metadataOptions, creditSpecificationCpuCredits,
+                userDataEncoded, dryRun(p), p.getFirst("Placement.HostId"), p.getFirst("Placement.Tenancy"),
+                blockDeviceMappings, "spot".equals(marketType), privateIpAddress, capacitySpecification,
+                ebsOptimized, networkInterfaceTags, volumeTags, template == null ? null : template.id());
+    }
 
-        if (!networkInterfaceTags.isEmpty()) {
-            List<String> eniIds = new ArrayList<>();
-            for (Instance inst : res.getInstances()) {
-                inst.getNetworkInterfaces().forEach(eni -> eniIds.add(eni.getNetworkInterfaceId()));
-            }
-            if (!eniIds.isEmpty()) {
-                service.createTags(region, eniIds, networkInterfaceTags);
-            }
-        }
+    private static List<Tag> mergeLaunchTags(List<Tag> defaults, List<Tag> overrides) {
+        Map<String, Tag> merged = new LinkedHashMap<>();
+        defaults.forEach(tag -> merged.put(tag.getKey(), tag));
+        overrides.forEach(tag -> merged.put(tag.getKey(), tag));
+        return new ArrayList<>(merged.values());
+    }
+
+    private Response handleRunInstances(MultivaluedMap<String, String> p, String region) {
+        Ec2LaunchPreparation.Launch prepared = service.preparedLaunch();
+        Ec2RunInstancesRequest launch = prepared == null ? prepareRunInstances(p, region) : prepared.request();
+        Reservation res = launch.run(service, region);
 
         XmlBuilder xml = new XmlBuilder()
                 .start("RunInstancesResponse", AwsNamespaces.EC2)
@@ -1027,7 +1024,8 @@ public class Ec2QueryHandler {
         }
     }
 
-    private LaunchTemplateData resolveRunInstancesLaunchTemplateData(MultivaluedMap<String, String> p, String region,
+    private Ec2Service.PreparedLaunchTemplate prepareRunInstancesLaunchTemplate(MultivaluedMap<String, String> p,
+                                                                               String region,
                                                                      boolean decodeUserData) {
         String id = p.getFirst("LaunchTemplate.LaunchTemplateId");
         String name = p.getFirst("LaunchTemplate.LaunchTemplateName");
@@ -1035,7 +1033,7 @@ public class Ec2QueryHandler {
         if ((id == null || id.isBlank()) && (name == null || name.isBlank())) {
             return null;
         }
-        return service.resolveLaunchTemplateData(region, id, name, version, decodeUserData);
+        return service.prepareLaunchTemplate(region, id, name, version, decodeUserData);
     }
 
     /**

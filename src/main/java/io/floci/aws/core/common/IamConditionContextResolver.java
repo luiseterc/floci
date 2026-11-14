@@ -755,6 +755,9 @@ public class IamConditionContextResolver {
      * does not exist yet, so there is no resource tag to offer.
      */
     private Map<String, List<String>> ec2RunInstancesConditionContext(ContainerRequestContext ctx) {
+        if (PreparedRequest.from(ctx) != null) {
+            return null;
+        }
         Map<String, String> form = formParameters(ctx);
         Map<String, List<String>> conditions = new LinkedHashMap<>();
         for (int spec = 1; form.containsKey("TagSpecification." + spec + ".ResourceType"); spec++) {
@@ -887,7 +890,7 @@ public class IamConditionContextResolver {
      * resource this context describes is the resource the handler acts on.
      */
     @SuppressWarnings("unchecked")
-    static Map<String, String> formParameters(ContainerRequestContext ctx) {
+    public static Map<String, String> formParameters(ContainerRequestContext ctx) {
         if ("GET".equalsIgnoreCase(ctx.getMethod()) && IamActionRegistry.isQueryRequest(ctx)) {
             Map<String, String> parameters = new LinkedHashMap<>();
             ctx.getUriInfo().getQueryParameters().forEach((key, values) -> {

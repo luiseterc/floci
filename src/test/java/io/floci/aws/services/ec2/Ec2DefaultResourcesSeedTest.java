@@ -1,11 +1,14 @@
 package io.floci.aws.services.ec2;
 
 import io.floci.aws.config.EmulatorConfig;
+import io.floci.aws.core.common.RegionResolver;
 import io.floci.aws.core.storage.InMemoryStorage;
 import io.floci.aws.core.storage.StorageBackend;
 import io.floci.aws.services.ec2.model.Subnet;
 import io.floci.aws.services.ec2.portforward.Ec2PortForwardManager;
 import io.floci.aws.testing.ParkingStore;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -34,6 +37,24 @@ class Ec2DefaultResourcesSeedTest {
                 () -> service.ensureDefaultResources(REGION),
                 () -> assertEquals(3, service.describeSubnets(REGION, List.of(), Map.of()).size(),
                         "the second call sees the three default subnets"));
+    }
+
+    @Test
+    void aLaunchPreviewWaitsForAnInProgressDefaultNetworkSeed() throws Exception {
+        ParkingStore<Subnet> subnets = new ParkingStore<>();
+        Ec2Service service = newService(subnets);
+        Ec2QueryHandler handler = new Ec2QueryHandler(service, mock(EmulatorConfig.class), mock(FlowLogService.class),
+                mock(Ec2EbsEncryptionService.class), mock(Ec2BlockPublicAccessService.class),
+                mock(Ec2IpamService.class), mock(RegionResolver.class));
+        MultivaluedMap<String, String> params = new MultivaluedHashMap<>();
+        params.putSingle("ImageId", "ami-preview");
+        params.putSingle("MinCount", "1");
+        params.putSingle("MaxCount", "1");
+        Ec2RunInstancesRequest request = handler.prepareRunInstances(params, REGION);
+        subnets.parkNextWrite();
+        assertOperationWaitsForParkedStore(subnets,
+                () -> service.ensureDefaultResources(REGION),
+                () -> assertEquals(1, service.previewRunInstances(REGION, request).network().groups().size()));
     }
 
     private Ec2Service newService(StorageBackend<String, Subnet> subnets) {

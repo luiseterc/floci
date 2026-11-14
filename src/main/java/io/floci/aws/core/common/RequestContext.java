@@ -16,6 +16,16 @@ public class RequestContext {
     private String accessKeyId;
     private String sessionToken;
     private Boolean iamGovernanceBypass;
+    private PreparedRequest preparedRequest;
+
+    public PreparedRequest getPreparedRequest() {
+        return preparedRequest;
+    }
+
+    public void setPreparedRequest(PreparedRequest preparedRequest) {
+        this.preparedRequest = preparedRequest;
+    }
+
 
     public String getAccountId() {
         return accountId;
