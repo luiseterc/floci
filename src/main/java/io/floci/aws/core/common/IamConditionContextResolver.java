@@ -848,11 +848,7 @@ public class IamConditionContextResolver {
         }
         Map<String, List<String>> result = context == null ? new LinkedHashMap<>() : new LinkedHashMap<>(context);
         result.keySet().removeIf(key -> prefixes.stream().anyMatch(key::startsWith));
-        for (Tag tag : ec2Service.get().resourceTags(region, parts[1])) {
-            for (String prefix : prefixes) {
-                result.put(prefix + tag.getKey(), List.of(tag.getValue() == null ? "" : tag.getValue()));
-            }
-        }
+        putStoredTags(result, region, parts[1], prefixes);
         return result;
     }
 
@@ -870,6 +866,11 @@ public class IamConditionContextResolver {
                 break;
             }
         }
+        putStoredTags(conditions, region, resourceId, prefixes);
+    }
+
+    private void putStoredTags(Map<String, List<String>> conditions, String region, String resourceId,
+                               List<String> prefixes) {
         for (Tag tag : ec2Service.get().resourceTags(region, resourceId)) {
             for (String prefix : prefixes) {
                 conditions.put(prefix + tag.getKey(), List.of(tag.getValue() == null ? "" : tag.getValue()));
