@@ -4265,7 +4265,7 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
                             eni.setVpcId(vpcId);
                             eni.setOwnerId(callerAccountId());
                             eni.setDescription(suppliedEni != null ? suppliedEni.getDescription() : null);
-                            eni.setMacAddress(suppliedEni != null ? suppliedEni.getMacAddress() : null);
+                            eni.setMacAddress(suppliedEni != null ? suppliedEni.getMacAddress() : randomMac());
                             eni.setPrivateIpAddress(privateIp);
                             eni.setPrivateDnsName(inst.getPrivateDnsName());
                             eni.setGroups(new ArrayList<>(sgIdentifiers));
@@ -8841,6 +8841,40 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
 
     public Optional<Instance> getInstance(String region, String instanceId) {
         return instances.get(key(region, instanceId));
+    }
+
+    /** Read-only IMDS view, scoped to the registered instance's account and current attachments. */
+    Map<String, Map<String, String>> networkMetadata(Instance registered) {
+        String account = registered.getOwnerId();
+        String region = registered.getRegion();
+        if (account == null || region == null) {
+            return Map.of();
+        }
+        Instance current = findInstanceForAccount(account, region, registered.getInstanceId()).orElse(null);
+        if (current == null || (current.getState() != null && "terminated".equals(current.getState().getName()))) {
+            return Map.of();
+        }
+        Map<String, Map<String, String>> result = new LinkedHashMap<>();
+        for (InstanceNetworkInterface attached : List.copyOf(current.getNetworkInterfaces())) {
+            String mac = attached.getMacAddress();
+            if (mac == null || mac.isBlank()) {
+                continue;
+            }
+            NetworkInterface stored = metadataResource(networkInterfaces, account, key(region, attached.getNetworkInterfaceId()));
+            if (stored != null && (stored.getAttachment() == null
+                    || !current.getInstanceId().equals(stored.getAttachment().getInstanceId()))) {
+                continue;
+            }
+            Subnet subnet = metadataResource(subnets, account, key(region, attached.getSubnetId()));
+            Vpc vpc = metadataResource(vpcs, account, key(region, attached.getVpcId()));
+            result.put(mac, Ec2NetworkMetadata.fields(attached, stored, subnet, vpc));
+        }
+        return result;
+    }
+
+    private static <T> T metadataResource(StorageBackend<String, T> storage, String account, String resourceKey) {
+        return (storage instanceof AccountAwareStorageBackend<T> aware
+                ? aware.getForAccount(account, resourceKey) : storage.get(resourceKey)).orElse(null);
     }
 
     public Instance findInstanceById(String instanceId) {

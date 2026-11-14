@@ -277,6 +277,9 @@ User data is returned as the original base64-decoded bytes, without decompressin
 | `GET /latest/meta-data/local-hostname` | Private DNS name |
 | `GET /latest/meta-data/hostname` | Private DNS name |
 | `GET /latest/meta-data/mac` | MAC address of first ENI |
+| `GET /latest/meta-data/network/interfaces/macs[/]` | MAC addresses of the instance's current attached interfaces |
+| `GET /latest/meta-data/network/interfaces/macs/{mac}[/]` | Available fields for that attached interface |
+| `GET /latest/meta-data/network/interfaces/macs/{mac}/{field}` | IPv4 interface identity, addresses, security groups, subnet and VPC CIDRs |
 | `GET /latest/meta-data/security-groups` | Security group names |
 | `GET /latest/meta-data/placement/availability-zone` | AZ |
 | `GET /latest/meta-data/placement/region` | Region |
@@ -287,6 +290,15 @@ User data is returned as the original base64-decoded bytes, without decompressin
 | `GET /latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance` | Instance identity role credentials |
 | `GET /latest/user-data` | Original user-data bytes, including compressed content |
 | `GET /latest/dynamic/instance-identity/document` | Identity document JSON |
+
+Network-interface metadata follows the registered instance's account and region,
+including primary and secondary addresses already represented in EC2 state.
+Detaching an interface removes it from this view. Unknown or unattached MACs and
+unavailable fields return `404`; IMDSv2 token requirements and instance isolation
+apply to every path. The modeled interfaces use network card zero. IPv6,
+delegated prefixes and public-address association metadata are not supplied by
+this IPv4 view, and these endpoints do not create Linux interfaces or implement
+secondary-address allocation APIs.
 
 IAM credentials are served when the instance has an `IamInstanceProfile.Arn` that resolves to an existing instance profile with one role in the profile's account. The role list uses the role name, which can differ from the profile name. Missing profiles, missing roles, and requests for another role return `404`.
 

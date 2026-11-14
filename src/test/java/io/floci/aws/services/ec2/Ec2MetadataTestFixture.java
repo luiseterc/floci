@@ -36,6 +36,7 @@ final class Ec2MetadataTestFixture implements AutoCloseable {
     private Vertx vertx;
     private Ec2MetadataServer server;
     private InstanceConnectKeys instanceConnect;
+    private Ec2Service ec2;
     private String endpoint;
 
     void start() throws Exception {
@@ -55,7 +56,7 @@ final class Ec2MetadataTestFixture implements AutoCloseable {
         int port = FreePorts.anyInterfacePort();
         when(config.services().ec2().imdsPort()).thenReturn(port);
         vertx = Vertx.vertx();
-        server = new Ec2MetadataServer(vertx, config, iam, serverClock, instanceConnect);
+        server = new Ec2MetadataServer(vertx, config, iam, serverClock, instanceConnect, ec2 == null ? null : () -> ec2);
         server.start().get(10, TimeUnit.SECONDS);
         endpoint = "http://127.0.0.1:" + port;
         if (registeredInstance != null) {
@@ -81,6 +82,11 @@ final class Ec2MetadataTestFixture implements AutoCloseable {
     /** Serves EC2 Instance Connect from {@code keys}; call before {@link #start()}. */
     Ec2MetadataTestFixture withInstanceConnect(InstanceConnectKeys keys) {
         this.instanceConnect = keys;
+        return this;
+    }
+
+    Ec2MetadataTestFixture withEc2(Ec2Service service) {
+        this.ec2 = service;
         return this;
     }
 

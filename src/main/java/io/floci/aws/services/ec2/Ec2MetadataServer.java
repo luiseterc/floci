@@ -20,6 +20,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import org.jboss.logging.Logger;
 
 import java.net.URLDecoder;
@@ -61,6 +62,7 @@ public class Ec2MetadataServer {
     private final EmulatorConfig config;
     private final Ec2InstanceCredentials credentials;
     private final Clock clock;
+    private final Provider<Ec2Service> ec2Service;
 
     /** IMDSv2: token value → Instance */
     private final Map<String, SessionToken> tokens = new ConcurrentHashMap<>();
@@ -74,8 +76,13 @@ public class Ec2MetadataServer {
 
     @Inject
     public Ec2MetadataServer(Vertx vertx, EmulatorConfig config, IamService iamService,
-                             InstanceConnectKeys instanceConnect) {
-        this(vertx, config, iamService, Clock.systemUTC(), instanceConnect);
+                             InstanceConnectKeys instanceConnect, Provider<Ec2Service> ec2Service) {
+        this(vertx, config, iamService, Clock.systemUTC(), instanceConnect, ec2Service);
+    }
+
+    Ec2MetadataServer(Vertx vertx, EmulatorConfig config, IamService iamService,
+                      InstanceConnectKeys instanceConnect) {
+        this(vertx, config, iamService, Clock.systemUTC(), instanceConnect, null);
     }
 
     Ec2MetadataServer(Vertx vertx, EmulatorConfig config, IamService iamService, Clock clock) {
@@ -84,11 +91,17 @@ public class Ec2MetadataServer {
 
     Ec2MetadataServer(Vertx vertx, EmulatorConfig config, IamService iamService, Clock clock,
                       InstanceConnectKeys instanceConnect) {
+        this(vertx, config, iamService, clock, instanceConnect, null);
+    }
+
+    Ec2MetadataServer(Vertx vertx, EmulatorConfig config, IamService iamService, Clock clock,
+                      InstanceConnectKeys instanceConnect, Provider<Ec2Service> ec2Service) {
         this.vertx = vertx;
         this.config = config;
         this.credentials = new Ec2InstanceCredentials(iamService);
         this.clock = clock;
         this.instanceConnect = instanceConnect;
+        this.ec2Service = ec2Service;
     }
 
     /** EC2 Instance Connect's signing material, for installing its trust anchor in guests; empty in tests. */
@@ -171,6 +184,8 @@ public class Ec2MetadataServer {
         router.get("/latest/meta-data/local-hostname").handler(ctx -> handleText(ctx, inst -> inst.getPrivateDnsName()));
         router.get("/latest/meta-data/hostname").handler(ctx -> handleText(ctx, inst -> inst.getPrivateDnsName()));
         router.get("/latest/meta-data/mac").handler(ctx -> handleMac(ctx));
+        router.get("/latest/meta-data/network/interfaces/macs").handler(this::handleNetworkMetadata);
+        router.get("/latest/meta-data/network/interfaces/macs/*").handler(this::handleNetworkMetadata);
         router.get("/latest/meta-data/security-groups").handler(ctx -> handleSecurityGroups(ctx));
         router.get("/latest/meta-data/placement/availability-zone").handler(ctx -> handleText(ctx, inst ->
                 inst.getPlacement() != null
@@ -338,6 +353,35 @@ public class Ec2MetadataServer {
         ctx.response().setStatusCode(200)
                 .putHeader("content-type", "text/plain")
                 .end(mac != null ? mac : "02:42:ac:11:00:02");
+    }
+
+    private void handleNetworkMetadata(RoutingContext ctx) {
+        Instance instance = resolveInstance(ctx);
+        if (instance == null) {
+            return;
+        }
+        Map<String, Map<String, String>> interfaces = ec2Service == null ? Map.of()
+                : ec2Service.get().networkMetadata(instance);
+        String path = ctx.normalizedPath().substring("/latest/meta-data/network/interfaces/macs".length());
+        String value = null;
+        if (path.isEmpty() || "/".equals(path)) {
+            value = String.join("\n", interfaces.keySet().stream().sorted().map(mac -> mac + "/").toList());
+        } else {
+            String[] parts = path.substring(1).split("/", -1);
+            Map<String, String> fields = interfaces.get(parts[0]);
+            if (fields != null) {
+                if (parts.length == 1 || (parts.length == 2 && parts[1].isEmpty())) {
+                    value = String.join("\n", fields.keySet().stream().sorted().toList());
+                } else if (parts.length == 2) {
+                    value = fields.get(parts[1]);
+                }
+            }
+        }
+        if (value == null || value.isBlank()) {
+            ctx.response().setStatusCode(404).end("not-available");
+        } else {
+            ctx.response().putHeader("content-type", "text/plain").end(value);
+        }
     }
 
     private void handleSecurityGroups(RoutingContext ctx) {
