@@ -264,7 +264,7 @@ public class IamConditionContextResolver {
         });
         targets.forEach((key, target) -> {
             if (key.contains("${TagKey}")) {
-                Map<String, String> tags = storedTargetValue(target, form.get(target), IamRole::getTags, IamUser::getTags);
+                Map<String, String> tags = storedIamTags(target, form.get(target));
                 if (tags != null) {
                     tags.forEach((tag, value) -> conditions.put(key.replace("${TagKey}", tag), List.of(value)));
                 }
@@ -306,6 +306,17 @@ public class IamConditionContextResolver {
                 conditions.put(key, keys);
             }
         });
+    }
+
+    private Map<String, String> storedIamTags(String target, String name) {
+        if ("OpenIDConnectProviderArn".equals(target)) {
+            if (name == null || !iamService.isResolvable()) {
+                return null;
+            }
+            return iamService.get().findOpenIDConnectProvider(requestContext.getAccountId(), name)
+                    .map(provider -> provider.getTags()).orElse(null);
+        }
+        return storedTargetValue(target, name, IamRole::getTags, IamUser::getTags);
     }
 
     private <T> T storedTargetValue(String target, String name,

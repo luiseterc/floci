@@ -2923,12 +2923,14 @@ floci populates:
 
   Resource tags use the same `fromTarget` route: `aws:ResourceTag/<key>` and
   `iam:ResourceTag/<key>` come from the stored role or user named by the generated target,
-  where the Service Reference lists those keys for that resource type. The lookup uses
-  the request account and the tags before any mutation. The table retains the source
-  resource types so a secondary `RoleName`, such as on `AddRoleToInstanceProfile`, cannot
-  supply the instance profile's tags. Missing targets carry no resource-tag values.
-  Creation of the target, unsupported target types, and ARN/task-ID-based lookups are
-  recorded in `notRead`. `PassRole` is a reasoned generator exception: the
+  where the Service Reference lists those keys for that resource type. In addition,
+  `aws:ResourceTag/<key>` reads OIDC provider tags by exact ARN in the caller account.
+  Provider reads, updates, tagging and deletion use existing tags; request tags do not
+  replace them. Missing or foreign-account providers contribute no resource-tag context.
+  The lookup uses the request account and the tags before any mutation. The table retains
+  the source resource types so a secondary `RoleName`, such as on `AddRoleToInstanceProfile`,
+  cannot supply the instance profile's tags. Missing targets carry no resource-tag values.
+  Creation of the target and unsupported target types are recorded in `notRead`. `PassRole` is a reasoned generator exception: the
   [IAM guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_tags.html) warns that
   ResourceTag conditions with this action do not have reliable results. Caller principal
   tags are not read here.

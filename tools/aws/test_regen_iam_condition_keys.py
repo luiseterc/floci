@@ -324,3 +324,19 @@ def test_check_rejects_hand_edited_tag_fields(tmp_path, monkeypatch):
     monkeypatch.setattr(regen_iam_condition_keys, "OUTPUT", edited)
     with pytest.raises(ValueError, match="request tag members differ"):
         regen_iam_condition_keys.main(["--check"])
+
+
+def test_oidc_resource_tags_use_the_exact_arn_member_only_for_the_provider_resource():
+    model = json.loads(json.dumps(MODEL))
+    model["operations"]["GetOpenIDConnectProvider"] = {"input": {"shape": "OidcInput"}}
+    model["shapes"]["OidcInput"] = {"type": "structure", "members": {
+        "OpenIDConnectProviderArn": {"shape": "Arn"}}}
+    pair = ("iam:GetOpenIDConnectProvider", "aws:ResourceTag/${TagKey}")
+    read, targets, unread = classify([pair], {pair[1]: ["String"]}, model, {pair: ["oidc-provider"]})
+    assert read == unread == []
+    assert targets == [{"action": pair[0], "key": pair[1], "target": "OpenIDConnectProviderArn",
+                        "resources": ["oidc-provider"]}]
+    assert classify([pair], {pair[1]: ["String"]}, model, {pair: ["role"]})[1] == []
+    model["shapes"]["OidcInput"]["members"]["OpenIDConnectProviderArn"] = {"shape": "Days"}
+    with pytest.raises(ValueError, match="not a string member"):
+        classify([pair], {pair[1]: ["String"]}, model, {pair: ["oidc-provider"]})

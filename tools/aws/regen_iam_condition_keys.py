@@ -6,7 +6,7 @@ For each such action and key, pinned botocore says whether the request carries t
 operation of the same name has a top-level string member named after the key, ignoring case
 (iam:PolicyARN is PolicyArn), and the key's type is String or ARN. BY_HAND names the member for a
 pair whose value sits in a member under another name; its type has to fit the key's. Those pairs
-are read. A FROM_TARGET key the request does not carry is the stored role's or user's value, and its
+are read. A FROM_TARGET key the request does not carry is the stored target's value, and its
 pair goes in fromTarget with the member that names the target. Every other pair the reference lists
 is notRead, with the reason. An operation that has the member but whose action does not list the key
 is left out, as AWS does not set the key for it.
@@ -18,7 +18,7 @@ fails on any difference, added pairs included: a key missing from the context st
 conditioned Allow matching and a conditioned Deny applying. --source reads a saved reference.
 
 Resource tag keys use the same fromTarget route as permissions boundaries for existing roles
-and users. Unsupported targets and exceptions are recorded in notRead with a reason. requestTags
+and users, plus OIDC providers. Unsupported targets and exceptions are recorded in notRead with a reason. requestTags
 lists the request tag keys of actions marked IsTaggingOnly in the reference, with their list
 and tag field names derived from botocore. --verify checks action/key coverage against the live
 reference; --check re-derives the stored targets and list shapes from pinned botocore.
@@ -59,6 +59,8 @@ RESOURCE_TAG_EXCEPTIONS = {
     "iam:PassRole": "AWS warns that ResourceTag conditions with PassRole do not have reliable results",
 }
 TARGET_MEMBERS = ("RoleName", "UserName")
+TAG_TARGET_MEMBERS = {"RoleName": "role", "UserName": "user",
+                      "OpenIDConnectProviderArn": "oidc-provider"}
 # Keys whose value, on an action without the member, does not come from the request.
 NOT_IN_REQUEST = {
     "iam:AccountPropertyNamespaces": "the value is the namespaces of the properties read or written",
@@ -130,9 +132,10 @@ def classify(pairs, types, model, resource_types=None):
         elif operation is None:
             reason = "no SDK operation of this name"
         elif member is None and key in FROM_TARGET:
-            target = next((m for m in TARGET_MEMBERS if m in members and (
+            candidates = TAG_TARGET_MEMBERS if key in RESOURCE_TAG_KEYS else TARGET_MEMBERS
+            target = next((m for m in candidates if m in members and (
                 key not in RESOURCE_TAG_KEYS
-                or m.removesuffix("Name").lower() in resource_types.get((action, key), []))), None)
+                or TAG_TARGET_MEMBERS[m] in resource_types.get((action, key), []))), None)
             if target is not None and key in RESOURCE_TAG_KEYS and action == "iam:Create" + target.removesuffix("Name"):
                 not_read.append({"action": action, "key": key,
                                  "reason": "the target does not exist before creation; "
@@ -145,7 +148,7 @@ def classify(pairs, types, model, resource_types=None):
                 continue
             if key not in RESOURCE_TAG_KEYS:
                 raise ValueError(f"{action}: no member names the role or user {key} is read from")
-            reason = "no member names a stored role or user whose resource tags can be read"
+            reason = "no member names a supported stored target whose resource tags can be read"
         elif member is None:
             reason = NOT_IN_REQUEST.get(key, "no member named after the key")
         elif not set(types.get(key, [])) <= READ_TYPES:

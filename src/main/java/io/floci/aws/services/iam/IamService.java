@@ -4464,6 +4464,21 @@ public class IamService implements SessionAccountLookup, ResourceProvider {
         return provider;
     }
 
+    /** Read-only exact-ARN lookup for authorization, without validation errors or storage migration. */
+    public Optional<OpenIDConnectProvider> findOpenIDConnectProvider(String accountId, String arn) {
+        if (!AwsArnUtils.isArnFor(arn, "iam")) {
+            return Optional.empty();
+        }
+        AwsArnUtils.Arn parsed = AwsArnUtils.parse(arn);
+        if (!accountId.equals(parsed.accountId()) || !parsed.region().isEmpty()
+                || !parsed.resource().startsWith("oidc-provider/")) {
+            return Optional.empty();
+        }
+        Optional<OpenIDConnectProvider> provider = oidcProviders instanceof AccountAwareStorageBackend<OpenIDConnectProvider> aware
+                ? aware.getForAccount(accountId, arn) : oidcProviders.get(arn);
+        return provider.filter(value -> arn.equals(value.getArn()));
+    }
+
     public OpenIDConnectProvider getOpenIDConnectProvider(String arn) {
         requireProviderArn(arn);
         return oidcProviders.get(arn)

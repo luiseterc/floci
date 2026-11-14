@@ -9,7 +9,7 @@ import java.util.function.Function;
 
 /**
  * The {@code iam:} condition keys an IAM request carries in its own members, and those read from the
- * role or user it names, generated from the AWS Service Reference and pinned botocore by
+ * stored target it names, generated from the AWS Service Reference and pinned botocore by
  * {@code tools/aws/regen_iam_condition_keys.py}.
  */
 final class IamConditionKeys {
@@ -57,8 +57,8 @@ final class IamConditionKeys {
     }
 
     /**
-     * Each condition key a request for {@code action} takes from the stored role or user it names, to the
-     * member that names it ({@code RoleName} or {@code UserName}); empty when none.
+     * Each condition key a request for {@code action} takes from the stored stored target it names, to the
+     * member that names it ({@code RoleName}, {@code UserName}, or {@code OpenIDConnectProviderArn}); empty when none.
      */
     static Map<String, String> targets(String action) {
         return TABLE.targets().getOrDefault(action, Map.of());
