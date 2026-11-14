@@ -2750,6 +2750,12 @@ security-group ingress/egress changes, and VPC, subnet, route table, gateway, an
 security-group deletion. Each generated ARN is checked with that resource's own
 stored tags; allowing an owned VPC does not authorize an unowned gateway or subnet.
 
+`ec2:CreateVolume` authorizes the new volume and any supplied snapshot or Outpost.
+Tag-on-create authorization supports the ownership conditions in
+`AmazonEBSCSIDriverPolicy`. Volume deletion and modification resolve the volume ARN;
+attachment and detachment also resolve a supplied instance ID. Each target is
+authorized independently, and volume ownership conditions use its current stored tags.
+
 `ec2:ModifyVpcAttribute` resolves the supplied `VpcId` to its ARN and checks the target's
 current stored tags under `aws:ResourceTag/` and `ec2:ResourceTag/`. Tags are read for each
 resolved ARN independently; request tags do not replace ownership tags on an existing VPC.

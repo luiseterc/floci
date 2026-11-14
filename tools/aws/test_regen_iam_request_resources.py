@@ -1206,8 +1206,10 @@ def test_resource_tag_prefixes_come_only_from_supported_reference_resources():
     documents = [{"Name": "ec2", "Resources": [
         {"Name": "instance", "ConditionKeys": ["vendor:ResourceTag/${TagKey}", "aws:RequestTag/${TagKey}",
                                                "aws:ResourceTag/${TagKey}", "ec2:Region"]},
-        {"Name": "volume", "ConditionKeys": ["volume:ResourceTag/${TagKey}"]}]}]
-    assert r.resource_tag_keys(documents) == {"ec2": {"instance": ["aws:ResourceTag/", "vendor:ResourceTag/"]}}
+        {"Name": "volume", "ConditionKeys": ["volume:ResourceTag/${TagKey}"]},
+        {"Name": "snapshot", "ConditionKeys": ["snapshot:ResourceTag/${TagKey}"]}]}]
+    assert r.resource_tag_keys(documents) == {"ec2": {
+        "instance": ["aws:ResourceTag/", "vendor:ResourceTag/"], "volume": ["volume:ResourceTag/"]}}
     assert r.resource_tag_keys([]) == {}
 
 

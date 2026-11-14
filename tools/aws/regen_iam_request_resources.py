@@ -461,9 +461,10 @@ READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
                       "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
                       "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
                       "ec2:DeleteVpc", "ec2:DeleteSubnet", "ec2:DeleteRouteTable", "ec2:DeleteInternetGateway",
-                      "ec2:DeleteSecurityGroup"}
+                      "ec2:DeleteSecurityGroup", "ec2:CreateVolume", "ec2:DeleteVolume",
+                      "ec2:AttachVolume", "ec2:DetachVolume", "ec2:ModifyVolume"}
 # Stored tags read by ARN for promoted scalar targets, separately from instance lists.
-READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group"}}
+READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group", "volume"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
