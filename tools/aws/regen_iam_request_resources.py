@@ -449,10 +449,13 @@ KNOWN_VARIABLES = {"Partition", "Region", "Account"}
 
 # A staged read of heterogeneous resource-id lists. The model supplies the member and its wire name;
 # the Service Reference supplies the action's types and their ARN formats. EC2 documents instance ids
-# with the i- prefix (EC2 User Guide, resource-ids). Only instances are covered here: other ids retain
-# a wildcard entry. Lists named by their resource ARN variable and heterogeneous Resources lists
+# with the i- prefix (EC2 User Guide, resource-ids); network prefixes are documented in the
+# DescribeSecurityGroups, DescribeNetworkAcls, DescribeRouteTables and DescribeNetworkInterfaces
+# API examples. Other ids retain a wildcard entry. Lists named by their resource ARN variable and heterogeneous Resources lists
 # share this reader and its generated condition contexts; requests without those lists stay unchanged.
-ID_TARGETS = {"ec2": {"member": "Resources", "prefixes": {"instance": "i-"}}}
+ID_TARGETS = {"ec2": {"member": "Resources", "prefixes": {"instance": "i-", "security-group": "sg-",
+             "network-acl": "acl-", "route-table": "rtb-", "network-interface": "eni-"},
+             "typedPrefixes": {"instance": "i-"}}}
 # Operations promoted from the staged namespace to the ordinary, metadata-derived resource rules.
 READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
                       "ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateInternetGateway", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint",
@@ -1696,7 +1699,7 @@ def id_targets(operation: str, types: list[str], formats: dict[str, str], models
         if "input" not in spec or "ec2" not in _protocols(model):
             continue
         members = model["shapes"][spec["input"]["shape"]].get("members", {})
-        variables = {variable for kind in configured["prefixes"] if kind in types and kind in formats
+        variables = {variable for kind in configured["typedPrefixes"] if kind in types and kind in formats
                      for variable in set(VARIABLE_RE.findall(formats[kind])) - KNOWN_VARIABLES}
         candidates = [name for name, member in members.items()
                       if _strings(model, model["shapes"][member["shape"]]) == "[]"
@@ -1707,8 +1710,11 @@ def id_targets(operation: str, types: list[str], formats: dict[str, str], models
         member = members.get(member_name)
         if member is None or _strings(model, model["shapes"][member["shape"]]) != "[]":
             continue
-        prefixes = {kind: prefix for kind, prefix in configured["prefixes"].items()
-                    if kind in types and kind in formats}
+        # Typed lists are promoted independently: a launch that accepts SecurityGroupIds also acts on
+        # images, volumes and implicit networking, so enabling heterogeneous tag targets must not
+        # turn that launch into a security-group-only authorization check.
+        supported = configured["prefixes"] if member_name == configured["member"] else configured["typedPrefixes"]
+        prefixes = {kind: prefix for kind, prefix in supported.items() if kind in types and kind in formats}
         if not prefixes:
             continue
         for kind in prefixes:

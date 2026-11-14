@@ -1647,3 +1647,12 @@ def test_ec2_query_names_follow_model_serialization_and_only_read_resource_membe
         "Groups[]": "ExactGroupWireName"}
     ec2["metadata"]["protocol"] = "query"
     assert r.ec2_query_members("ec2:CreateNetworkInterface", {"ec2": ec2}, {"Groups"}) == {}
+
+
+def test_network_tag_prefixes_do_not_promote_typed_launch_inputs():
+    ec2 = model({"Launch": {"SecurityGroupIds": "Strings"}, "AnnotateResources": {"Resources": "Strings"}}, "ec2")
+    formats = {"security-group": "arn:${Partition}:ec2:${Region}:${Account}:security-group/${SecurityGroupId}"}
+    upstream = {"action": "ec2:Launch", "types": ["security-group"]}
+    assert "targets" not in r.entry_for("ec2:Launch", upstream, formats, {"ec2": ec2})
+    tags = r.entry_for("ec2:AnnotateResources", {**upstream, "action": "ec2:AnnotateResources"}, formats, {"ec2": ec2})
+    assert tags["targets"]["prefixes"] == {"security-group": "sg-"}
