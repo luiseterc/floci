@@ -1656,3 +1656,17 @@ def test_network_tag_prefixes_do_not_promote_typed_launch_inputs():
     assert "targets" not in r.entry_for("ec2:Launch", upstream, formats, {"ec2": ec2})
     tags = r.entry_for("ec2:AnnotateResources", {**upstream, "action": "ec2:AnnotateResources"}, formats, {"ec2": ec2})
     assert tags["targets"]["prefixes"] == {"security-group": "sg-"}
+
+
+@pytest.mark.parametrize("operation,members,kinds", [
+    ("AssociateAddress", {"AllocationId": "String", "InstanceId": "String", "NetworkInterfaceId": "String"},
+     ["elastic-ip", "instance", "network-interface"]),
+    ("ReleaseAddress", {"AllocationId": "String"}, ["elastic-ip"]),
+])
+def test_eip_operations_read_scalar_targets_from_models(operation, members, kinds):
+    variables = {"elastic-ip": "AllocationId", "instance": "InstanceId", "network-interface": "NetworkInterfaceId"}
+    formats = {kind: f"arn:${{Partition}}:ec2:${{Region}}:${{Account}}:{kind}/${{{variables[kind]}}}" for kind in kinds}
+    ec2 = model({operation: members}, "ec2")
+    action = "ec2:" + operation
+    entry = r.entry_for(action, {"action": action, "types": kinds}, formats, {"ec2": ec2})
+    assert entry["resources"] == [{"type": kind, "fill": {variables[kind]: variables[kind]}} for kind in kinds]
