@@ -11,6 +11,150 @@
       "ec2-instance-connect:privateIpAddress",
       "ec2-instance-connect:remotePort"
     ],
+    "kms:CancelKeyDeletion": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:CreateAlias": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:CreateGrant": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:CreateKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:Decapsulate": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:Decrypt": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:DeleteAlias": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:DeleteImportedKeyMaterial": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:DeriveSharedSecret": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:DescribeKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:DisableKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:DisableKeyRotation": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:EnableKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:EnableKeyRotation": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:Encapsulate": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:Encrypt": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GenerateDataKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GenerateDataKeyPair": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GenerateDataKeyPairWithoutPlaintext": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GenerateDataKeyWithoutPlaintext": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GenerateMac": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GetKeyLastUsage": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GetKeyPolicy": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GetKeyRotationStatus": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GetParametersForImport": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:GetPublicKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ImportKeyMaterial": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ListGrants": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ListKeyPolicies": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ListKeyRotations": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ListResourceTags": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:PutKeyPolicy": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ReEncryptFrom": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ReEncryptTo": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ReplicateKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:RetireGrant": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:RevokeGrant": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:RotateKeyOnDemand": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:ScheduleKeyDeletion": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:Sign": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:SynchronizeMultiRegionKey": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:TagResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:UntagResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:UpdateAlias": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:UpdateKeyDescription": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:UpdatePrimaryRegion": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:Verify": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "kms:VerifyMac": [
+      "aws:ResourceTag/${TagKey}"
+    ],
     "lambda:CreateWebFunction": [
       "lambda:Request/WebFunctionAuthType"
     ],

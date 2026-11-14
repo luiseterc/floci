@@ -3,6 +3,16 @@
 **Protocol:** JSON 1.1 (`X-Amz-Target: TrentService.*`)
 **Endpoint:** `POST http://localhost:4566/`
 
+## Stored tags in IAM policies
+
+With IAM enforcement enabled, supported key-resource operations evaluate
+`aws:ResourceTag/<key>` using that key's stored tags. This includes `DescribeKey`
+through a key ID, key ARN, alias name or alias ARN, and `Decrypt` when the key is
+resolved from ciphertext. Each key in an alias update is checked independently;
+tags on a key are never inherited by the alias resource. Tag changes and alias
+retargeting affect subsequent requests. Supported actions come from the AWS
+Service Authorization Reference. This does not add KMS key-policy evaluation.
+
 ## Supported Actions
 
 <!-- floci:actions:start -->

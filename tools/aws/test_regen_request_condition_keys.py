@@ -128,3 +128,15 @@ def run_aggregate_gate(tmp_path, changed, fail):
         ["make", "--no-print-directory", "iam-data-verify", "CHANGED=" + changed,
          "MAKE=" + str(recursive_make)],
         cwd=OUTPUT.parents[4], capture_output=True, text=True, check=False)
+
+
+def test_kms_stored_tag_actions_are_derived_without_request_members():
+    reference = {"Name": "kms", "Resources": [{"Name": "key", "ConditionKeys": ["aws:ResourceTag/${TagKey}"]}],
+                 "Actions": [{"Name": "DescribeKey", "Resources": [{"Name": "key"}]},
+                             {"Name": "ListKeys", "Resources": []}]}
+    actions = action_keys("kms", reference)
+    assert actions == {"kms:DescribeKey": ["aws:ResourceTag/${TagKey}"]}
+    assert request_members("kms", {"operations": {}}, actions) == {}
+    document = json.loads(OUTPUT.read_text())
+    assert document["actions"]["kms:DescribeKey"] == ["aws:ResourceTag/${TagKey}"]
+    assert "kms:ListKeys" not in document["actions"]

@@ -18,6 +18,7 @@ import io.floci.aws.services.iam.IamService;
 import io.floci.aws.services.iam.ResourceArnBuilder;
 import io.floci.aws.services.iam.model.IamRole;
 import io.floci.aws.services.iam.model.IamUser;
+import io.floci.aws.services.kms.KmsService;
 import io.floci.aws.services.lambdaweb.LambdaWebService;
 import io.floci.aws.services.s3.S3ConditionKeys;
 import io.floci.aws.services.s3.S3ControlTagConditionKeys;
@@ -103,6 +104,7 @@ public class IamConditionContextResolver {
     private final Instance<CloudWatchLogsCrossAccountService> crossAccountService;
     private final Instance<IamService> iamService;
     private final Instance<LambdaWebService> lambdaWebService;
+    private final Instance<KmsService> kmsService;
     private final RequestContext requestContext;
     private final EmulatorConfig config;
     private final CurrentVertxRequest currentVertxRequest;
@@ -121,12 +123,13 @@ public class IamConditionContextResolver {
                                        Instance<CloudWatchLogsCrossAccountService> crossAccountService,
                                        Instance<IamService> iamService,
                                        Instance<LambdaWebService> lambdaWebService,
+                                       Instance<KmsService> kmsService,
                                        RequestContext requestContext,
                                        EmulatorConfig config,
                                        CurrentVertxRequest currentVertxRequest,
                                        ResolvedServiceCatalog serviceCatalog) {
         this(dynamoDbFacade, ec2Service, s3Service, logsService, crossAccountService, iamService,
-                lambdaWebService, requestContext,
+                lambdaWebService, kmsService, requestContext,
                 config, currentVertxRequest, serviceCatalog, Clock.systemUTC());
     }
 
@@ -137,6 +140,7 @@ public class IamConditionContextResolver {
                                 Instance<CloudWatchLogsCrossAccountService> crossAccountService,
                                 Instance<IamService> iamService,
                                 Instance<LambdaWebService> lambdaWebService,
+                                Instance<KmsService> kmsService,
                                 RequestContext requestContext,
                                 EmulatorConfig config,
                                 CurrentVertxRequest currentVertxRequest,
@@ -148,11 +152,27 @@ public class IamConditionContextResolver {
         this.crossAccountService = crossAccountService;
         this.iamService = iamService;
         this.lambdaWebService = lambdaWebService;
+        this.kmsService = kmsService;
         this.requestContext = requestContext;
         this.config = config;
         this.currentVertxRequest = currentVertxRequest;
         this.clock = clock;
         this.serviceCatalog = serviceCatalog;
+    }
+
+    /** Read each resolved key's tags separately, including both sides of an alias update. */
+    public Map<String, List<String>> withKmsResourceTags(String scope, String action, String resource,
+                                                       String region, Map<String, List<String>> context) {
+        if (!"kms".equals(scope) || !RequestConditionKeys.takes(action, "aws:ResourceTag/${TagKey}")) {
+            return context;
+        }
+        Map<String, List<String>> result = context == null ? new LinkedHashMap<>() : new LinkedHashMap<>(context);
+        result.keySet().removeIf(key -> key.regionMatches(true, 0, RESOURCE_TAG_PREFIX, 0, RESOURCE_TAG_PREFIX.length()));
+        if (kmsService.isResolvable()) {
+            kmsService.get().storedKeyTags(resource, region).forEach((key, value) ->
+                    result.put(RESOURCE_TAG_PREFIX + key, List.of(value)));
+        }
+        return result;
     }
 
     public Map<String, List<String>> resolve(String credentialScope, String action,

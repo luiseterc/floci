@@ -4,6 +4,7 @@
 Some service condition keys take their value from the request, or from the resource the request acts on before
 it. `SERVICES` names, for each namespace, the keys read and where:
 
+- `kms`: stored tags of each resolved key supply `aws:ResourceTag/${TagKey}`.
 - `lambda`: a Lambda Web Functions request is checked with the endpoint's authType as
   `lambda:Request/WebFunctionAuthType`, the one the request names, and `lambda:Resource/WebFunctionAuthType`,
   the one the endpoint has before the request, read from the stored endpoint.
@@ -64,6 +65,12 @@ FLAT_PROTOCOLS = ("query", "ec2")
 # carries it, each key read from the stored resource, and the actions that take a key their request does not
 # carry, with the reason.
 SERVICES = {
+    "kms": {
+        "model": "kms",
+        "request": {},
+        "stored": ("aws:ResourceTag/${TagKey}",),
+        "not_in_request": {},
+    },
     "lambda": {
         "model": "lambda-web",
         "request": {"lambda:Request/WebFunctionAuthType": "authType"},

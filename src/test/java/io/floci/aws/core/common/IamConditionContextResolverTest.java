@@ -127,7 +127,7 @@ class IamConditionContextResolverTest {
         resolver = new IamConditionContextResolver(
                 dynamoDbFacadeInstance, ec2ServiceInstance, s3ServiceInstance, logsServiceInstance,
                 crossAccountServiceInstance, iamServiceInstance,
-                lambdaWebServiceInstance,
+                lambdaWebServiceInstance, mock(Instance.class),
                 requestContext, config,
                 null, serviceCatalog);
     }
@@ -721,7 +721,7 @@ class IamConditionContextResolverTest {
     private IamConditionContextResolver resolverAt(Instant now) {
         return new IamConditionContextResolver(mock(Instance.class), mock(Instance.class), mock(Instance.class),
                 mock(Instance.class), mock(Instance.class), mock(Instance.class), mock(Instance.class),
-                requestContext, config, null,
+                mock(Instance.class), requestContext, config, null,
                 serviceCatalog, Clock.fixed(now, ZoneOffset.UTC));
     }
 

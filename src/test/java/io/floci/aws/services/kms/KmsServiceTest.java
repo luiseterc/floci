@@ -2146,6 +2146,18 @@ class KmsServiceTest {
     // ── Issue #269 — CreateKey with Tags ────────────────────────────────────
 
     @Test
+    void storedKeyTagsStayWithinTheExactArnAndDoNotCreateMissingKeys() {
+        KmsKey key = kmsService.createKey("resource tags", null, Map.of("Owner", "one"), "us-east-1");
+        assertEquals(Map.of("Owner", "one"), kmsService.storedKeyTags(key.getArn(), "us-east-1"));
+        assertEquals(Map.of(), kmsService.storedKeyTags(key.getArn(), "us-west-2"));
+        assertEquals(Map.of(), kmsService.storedKeyTags(key.getArn().replace("000000000000", "111111111111"), "us-east-1"));
+        assertEquals(Map.of(), kmsService.storedKeyTags(key.getArn().replace("arn:aws:", "arn:aws-cn:"), "us-east-1"));
+        assertEquals(Map.of(), kmsService.storedKeyTags("alias/aws/s3", "us-east-1"));
+        assertEquals(Map.of(), kmsService.storedKeyTags("*", "us-east-1"));
+        assertEquals(1, keyStore.scan(k -> true).size());
+    }
+
+    @Test
     void createKeyWithTagsStoresTags() {
         KmsKey key = kmsService.createKey("tagged-key", null, Map.of("env", "prod", "team", "platform"), REGION);
 

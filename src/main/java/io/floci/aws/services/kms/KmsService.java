@@ -2342,6 +2342,22 @@ public class KmsService implements ResourceProvider {
         }
     }
 
+    /** Read a resolved key's tags without creating managed keys or generating key material. */
+    public Map<String, String> storedKeyTags(String arn, String region) {
+        if (!AwsArnUtils.isArnFor(arn, "kms")) {
+            return Map.of();
+        }
+        AwsArnUtils.Arn parsed = AwsArnUtils.parse(arn);
+        if (!region.equals(parsed.region()) || !regionResolver.getAccountId().equals(parsed.accountId())
+                || !parsed.resource().startsWith("key/")) {
+            return Map.of();
+        }
+        return keyStore.get(region + "::" + parsed.resource().substring("key/".length()))
+                .filter(key -> arn.equals(key.getArn()))
+                .map(key -> key.getTags() == null ? Map.<String, String>of() : Map.copyOf(key.getTags()))
+                .orElse(Map.of());
+    }
+
     /**
      * The stored ARN of the key the grant a retirement or a revocation acts on belongs to: the
      * grant its {@code GrantToken} names when the request carries one, and otherwise the grant
