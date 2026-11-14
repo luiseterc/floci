@@ -21,6 +21,8 @@ import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
 
 /**
@@ -89,14 +91,23 @@ public class TlsProxyServer {
         failedPorts.forEach(handler::accept);
     }
     private NetClient client;
+    private final ProxyPeerAddresses peerAddresses;
+    private final Set<Runnable> activeMappings = ConcurrentHashMap.newKeySet();
+    private final AtomicBoolean stopped = new AtomicBoolean();
 
     @Inject
-    public TlsProxyServer(Vertx vertx, EmulatorConfig config, Config mpConfig) {
-        this(vertx, config, NetworkExposureGuard.publicHost(mpConfig), HTTP_BACKEND_PORT, HTTPS_BACKEND_PORT);
+    public TlsProxyServer(Vertx vertx, EmulatorConfig config, Config mpConfig, ProxyPeerAddresses peerAddresses) {
+        this(vertx, config, NetworkExposureGuard.publicHost(mpConfig), HTTP_BACKEND_PORT, HTTPS_BACKEND_PORT, peerAddresses);
     }
 
     /** Visible for testing — lets tests point the proxy at backends on non-default ports. */
     TlsProxyServer(Vertx vertx, EmulatorConfig config, String host, int httpBackendPort, int httpsBackendPort) {
+        this(vertx, config, host, httpBackendPort, httpsBackendPort, new ProxyPeerAddresses());
+    }
+
+    TlsProxyServer(Vertx vertx, EmulatorConfig config, String host, int httpBackendPort, int httpsBackendPort,
+                   ProxyPeerAddresses peerAddresses) {
+        this.peerAddresses = peerAddresses;
         this.vertx = vertx;
         this.config = config;
         this.host = host;
@@ -189,6 +200,17 @@ public class TlsProxyServer {
      */
     private Handler<NetSocket> buildConnectHandler() {
         return frontSocket -> {
+            AtomicBoolean closed = new AtomicBoolean();
+            AtomicReference<Runnable> mapping = new AtomicReference<>();
+            Runnable cleanup = () -> {
+                closed.set(true);
+                Runnable remove = mapping.get();
+                if (remove != null) {
+                    remove.run();
+                    activeMappings.remove(remove);
+                }
+            };
+            frontSocket.closeHandler(ignored -> cleanup.run());
             // Pause incoming data until we've peeked at the first byte
             frontSocket.pause();
 
@@ -210,7 +232,18 @@ public class TlsProxyServer {
                 client.connect(backendPort, "127.0.0.1").onComplete(ar -> {
                     if (ar.succeeded()) {
                         NetSocket backSocket = ar.result();
+                        Runnable remove = peerAddresses.register(backSocket.localAddress(), backSocket.remoteAddress(),
+                                frontSocket.remoteAddress());
+                        activeMappings.add(remove);
+                        mapping.set(remove);
+                        backSocket.closeHandler(ignored -> cleanup.run());
+                        if (closed.get() || stopped.get()) {
+                            cleanup.run();
+                            backSocket.close();
+                            return;
+                        }
 
+                        // Register before forwarding any bytes to the HTTP or TLS backend.
                         // Send the initial buffer that we already read
                         backSocket.write(buffer);
 
@@ -235,6 +268,9 @@ public class TlsProxyServer {
 
     @PreDestroy
     void stop() {
+        stopped.set(true);
+        activeMappings.forEach(Runnable::run);
+        activeMappings.clear();
         for (NetServer server : proxyServers) {
             server.close();
         }

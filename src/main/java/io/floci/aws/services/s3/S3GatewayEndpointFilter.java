@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.floci.aws.config.EmulatorConfig;
+import io.floci.aws.config.ProxyPeerAddresses;
 import io.floci.aws.core.common.RequestContext;
 import io.floci.aws.services.ec2.S3GatewayEndpointResolver;
 import io.floci.aws.services.ec2.model.VpcEndpoint;
@@ -38,18 +39,21 @@ public class S3GatewayEndpointFilter implements ContainerRequestFilter {
     private final RequestContext requestContext;
     private final EmulatorConfig config;
     private final ObjectMapper mapper;
+    private final ProxyPeerAddresses peerAddresses;
 
     @Context
     ResourceInfo resourceInfo;
 
     @Inject
     public S3GatewayEndpointFilter(S3GatewayEndpointResolver resolver, CurrentVertxRequest currentRequest,
-                                   RequestContext requestContext, EmulatorConfig config, ObjectMapper mapper) {
+                                   RequestContext requestContext, EmulatorConfig config, ObjectMapper mapper,
+                                   ProxyPeerAddresses peerAddresses) {
         this.resolver = resolver;
         this.currentRequest = currentRequest;
         this.requestContext = requestContext;
         this.config = config;
         this.mapper = mapper;
+        this.peerAddresses = peerAddresses;
     }
 
     @Override
@@ -62,7 +66,8 @@ public class S3GatewayEndpointFilter implements ContainerRequestFilter {
         if (routing == null || routing.request().connection() == null) {
             return;
         }
-        SocketAddress peer = routing.request().connection().remoteAddress();
+        SocketAddress peer = peerAddresses.resolve(routing.request().connection().remoteAddress(),
+                routing.request().connection().localAddress());
         if (peer == null) {
             return;
         }

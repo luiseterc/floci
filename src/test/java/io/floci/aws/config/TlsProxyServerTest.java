@@ -3,10 +3,14 @@ package io.floci.aws.config;
 import io.floci.aws.testutil.FreePorts;
 import io.vertx.core.Vertx;
 import io.vertx.core.net.NetServer;
+import io.vertx.core.net.NetSocket;
+import io.vertx.core.net.SocketAddress;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -21,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -156,6 +161,38 @@ class TlsProxyServerTest {
         int publicPort = FreePorts.anyInterfacePort();
         proxy = new TlsProxyServer(vertx, configWith(false, publicPort, 443), "127.0.0.1", 4510, 4511);
         assertFalse(portAccepts(publicPort), "no proxy should listen when TLS is disabled");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"71,front", "22,front", "71,back", "22,back", "71,stop", "22,stop"})
+    @Timeout(20)
+    void preservesPeerUntilEitherSocketClosesOrProxyStops(int firstByte, String closeSide) throws Exception {
+        ProxyPeerAddresses peers = new ProxyPeerAddresses();
+        CompletableFuture<NetSocket> received = new CompletableFuture<>();
+        httpBackend = vertx.createNetServer().connectHandler(socket -> socket.handler(buffer -> {
+            received.complete(socket);
+            socket.write("OK");
+        })).listen(0, "127.0.0.1").toCompletionStage().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        int port = FreePorts.anyInterfacePort();
+        proxy = new TlsProxyServer(vertx, configWith(true, port, 0), "127.0.0.1",
+                httpBackend.actualPort(), httpBackend.actualPort(), peers);
+        try (Socket front = new Socket("127.0.0.1", port)) {
+            front.getOutputStream().write(firstByte);
+            front.getOutputStream().flush();
+            front.setSoTimeout(5000);
+            assertEquals('O', front.getInputStream().read());
+            NetSocket back = received.get(5, TimeUnit.SECONDS);
+            SocketAddress remote = back.remoteAddress();
+            SocketAddress local = back.localAddress();
+            assertEquals(front.getLocalPort(), peers.resolve(remote, local).port());
+            switch (closeSide) {
+                case "front" -> front.close();
+                case "back" -> back.close();
+                case "stop" -> proxy.stop();
+                default -> throw new IllegalArgumentException(closeSide);
+            }
+            await().untilAsserted(() -> assertEquals(remote, peers.resolve(remote, local)));
+        }
     }
 
     // ---- helpers ----
