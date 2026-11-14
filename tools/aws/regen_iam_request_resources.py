@@ -471,7 +471,7 @@ READ_IN_ID_TARGETS = {"ec2:CreateVpc", "ec2:ModifyVpcAttribute",
                       "ec2:DeleteSecurityGroup", "ec2:CreateNetworkInterface", "ec2:AllocateAddress",
                       "ec2:CreateNatGateway"}
 # Stored tags read by ARN for promoted scalar targets, separately from instance lists.
-READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group", "elastic-ip"}}
+READ_RESOURCE_TAGS = {"ec2": {"vpc", "subnet", "route-table", "internet-gateway", "security-group", "elastic-ip", "launch-template"}}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
@@ -1737,7 +1737,10 @@ def id_targets(operation: str, types: list[str], formats: dict[str, str], models
 # Operations whose service supplies an effective input and a read-only output projection before
 # authorization. Admission selects a resolver, never resource types or member paths: those are
 # derived below from the same Service Reference and botocore shapes as ordinary request resources.
-PREPARED_OPERATIONS = {"ec2:RunInstances"}
+PREPARED_OPERATIONS = {"ec2:RunInstances", "ec2:CreateFleet"}
+# The fleet handler executes resolved RunInstances plans. Their projection is
+# modeled with that operation's SDK shapes, still limited to the fleet's AWS types.
+PREPARED_CALLS = {"ec2:CreateFleet": {"RunInstances": "calls.RunInstances[]"}}
 
 
 def prepared_resources(operation: str, types: list[str], formats: dict[str, str],
@@ -1769,6 +1772,10 @@ def prepared_resources(operation: str, types: list[str], formats: dict[str, str]
         for side in ("input", "output"):
             if side in spec:
                 walk(spec[side]["shape"], side)
+        for child, prefix in PREPARED_CALLS.get(operation, {}).items():
+            for side, shape in model["operations"].get(child, {}).items():
+                if side in ("input", "output"):
+                    walk(shape["shape"], prefix + "." + side)
         for kind in types:
             variables = set(VARIABLE_RE.findall(formats.get(kind, ""))) - KNOWN_VARIABLES
             if len(variables) != 1:

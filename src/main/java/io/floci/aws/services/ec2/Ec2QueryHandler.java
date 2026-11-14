@@ -564,7 +564,7 @@ public class Ec2QueryHandler {
      * specification naming anything else is rejected; the other callers read only the
      * specification that matches, as they always did.
      */
-    private List<Tag> parseTagsForResource(MultivaluedMap<String, String> p, String resourceType) {
+    List<Tag> parseTagsForResource(MultivaluedMap<String, String> p, String resourceType) {
         return parseTagsForResource(p, resourceType, Set.of());
     }
 
@@ -1065,27 +1065,8 @@ public class Ec2QueryHandler {
                     "The request must contain the parameter TargetCapacitySpecification.TotalTargetCapacity.", 400);
         }
 
-        List<FleetLaunch> launches = parseFleetLaunches(p, region);
-        if (launches.isEmpty()) {
-            throw new AwsException("MissingParameter",
-                    "The request must contain the parameter LaunchTemplateConfigs.", 400);
-        }
-
-        // Resolve and validate every launch template before honoring DryRun. AWS returns
-        // DryRunOperation only after it has established that the request could succeed.
-        for (FleetLaunch launch : launches) {
-            if (launch.imageId() == null || launch.imageId().isBlank()) {
-                throw new AwsException("MissingParameter",
-                        "Each fleet launch must specify an ImageId in the launch template or override.", 400);
-            }
-            if (launch.instanceType() == null || launch.instanceType().isBlank()) {
-                throw new AwsException("MissingParameter",
-                        "Each fleet launch must specify an InstanceType in the launch template or override.", 400);
-            }
-            // The template stored them unchecked; the launch would refuse them, so the dry run does.
-            Ec2Service.validateMetadataOptions(launch.metadataOptions());
-            Ec2Service.requireValidLaunchDevices(launch.blockDeviceMappings());
-        }
+        Ec2FleetPreparation.Fleet prepared = service.preparedFleet();
+        List<FleetLaunch> launches = prepared == null ? prepareFleetLaunches(p, region) : prepared.launches();
         checkDryRun(p);
 
         List<FleetLaunchResult> results = new ArrayList<>(targetCapacity);
@@ -1093,25 +1074,10 @@ public class Ec2QueryHandler {
         try {
             for (int i = 0; i < targetCapacity; i++) {
                 FleetLaunch launch = launches.get(i % launches.size());
-                Reservation reservation = service.runInstances(
-                        region,
-                        launch.imageId(),
-                        launch.instanceType(),
-                        1,
-                        1,
-                        launch.keyName(),
-                        launch.securityGroupIds(),
-                        launch.subnetId(),
-                        p.getFirst("ClientToken"),
-                        launch.instanceTags(),
-                        launch.userData(),
-                        launch.iamInstanceProfileArn(),
-                        launch.associatePublicIpAddress(),
-                        null,
-                        0,
-                        launch.availabilityZone(), launch.metadataOptions(), null, launch.encodedUserData(), false,
-                        null, null, launch.blockDeviceMappings(), "spot".equals(capacityType), null,
-                        launch.capacityReservationSpecification());
+                Ec2LaunchPreparation.Launch authorized = prepared == null ? null
+                        : prepared.plans().get(i % launches.size());
+                Reservation reservation = service.runFleetLaunch(region, launch.request("spot".equals(capacityType)),
+                        launch.availabilityZone(), authorized);
                 Instance instance = reservation.getInstances().get(0);
                 launched.add(reservation);
                 results.add(new FleetLaunchResult(instance, launch));
@@ -1198,6 +1164,31 @@ public class Ec2QueryHandler {
         return xmlResponse(xml.build());
     }
 
+    List<FleetLaunch> prepareFleetLaunches(MultivaluedMap<String, String> p, String region) {
+        List<FleetLaunch> launches = parseFleetLaunches(p, region);
+        if (launches.isEmpty()) {
+            throw new AwsException("MissingParameter",
+                    "The request must contain the parameter LaunchTemplateConfigs.", 400);
+        }
+
+        // Resolve and validate every launch template before honoring DryRun. AWS returns
+        // DryRunOperation only after it has established that the request could succeed.
+        for (FleetLaunch launch : launches) {
+            if (launch.imageId() == null || launch.imageId().isBlank()) {
+                throw new AwsException("MissingParameter",
+                        "Each fleet launch must specify an ImageId in the launch template or override.", 400);
+            }
+            if (launch.instanceType() == null || launch.instanceType().isBlank()) {
+                throw new AwsException("MissingParameter",
+                        "Each fleet launch must specify an InstanceType in the launch template or override.", 400);
+            }
+            // The template stored them unchecked; the launch would refuse them, so the dry run does.
+            Ec2Service.validateMetadataOptions(launch.metadataOptions());
+            Ec2Service.requireValidLaunchDevices(launch.blockDeviceMappings());
+        }
+        return List.copyOf(launches);
+    }
+
     private List<FleetLaunch> parseFleetLaunches(MultivaluedMap<String, String> p, String region) {
         List<FleetLaunch> launches = new ArrayList<>();
         for (int i = 1; ; i++) {
@@ -1208,9 +1199,14 @@ public class Ec2QueryHandler {
             String launchTemplateId = p.getFirst(base + ".LaunchTemplateSpecification.LaunchTemplateId");
             String launchTemplateName = p.getFirst(base + ".LaunchTemplateSpecification.LaunchTemplateName");
             String version = p.getFirst(base + ".LaunchTemplateSpecification.Version");
-            LaunchTemplateData template = service.resolveLaunchTemplateData(
-                    region, launchTemplateId, launchTemplateName, version);
+            Ec2Service.PreparedLaunchTemplate resolved = service.prepareLaunchTemplate(
+                    region, launchTemplateId, launchTemplateName, version, true);
+            launchTemplateId = resolved.id();
+            LaunchTemplateData template = resolved.data();
             List<Tag> fleetInstanceTags = parseTagsForResource(p, "instance");
+            List<Tag> interfaceTags = mergeLaunchTags(template.tagsForResource("network-interface"),
+                    parseTagsForResource(p, "network-interface"));
+            List<Tag> volumeTags = mergeLaunchTags(template.tagsForResource("volume"), parseTagsForResource(p, "volume"));
 
             boolean hasOverride = false;
             for (int j = 1; ; j++) {
@@ -1224,11 +1220,11 @@ public class Ec2QueryHandler {
                 }
                 hasOverride = true;
                 launches.add(fleetLaunch(region, template, launchTemplateId, launchTemplateName, version,
-                        instanceType, imageId, subnetId, availabilityZone, fleetInstanceTags));
+                        instanceType, imageId, subnetId, availabilityZone, fleetInstanceTags, interfaceTags, volumeTags));
             }
             if (!hasOverride) {
                 launches.add(fleetLaunch(region, template, launchTemplateId, launchTemplateName, version,
-                        null, null, null, null, fleetInstanceTags));
+                        null, null, null, null, fleetInstanceTags, interfaceTags, volumeTags));
             }
         }
         return launches;
@@ -1238,7 +1234,7 @@ public class Ec2QueryHandler {
                                     String launchTemplateName, String version,
                                     String overrideInstanceType, String overrideImageId,
                                     String overrideSubnetId, String overrideAvailabilityZone,
-                                    List<Tag> fleetInstanceTags) {
+                                    List<Tag> fleetInstanceTags, List<Tag> interfaceTags, List<Tag> volumeTags) {
         Map<String, Tag> tags = new LinkedHashMap<>();
         for (Tag tag : template.getInstanceTags()) {
             tags.put(tag.getKey(), tag);
@@ -1276,7 +1272,7 @@ public class Ec2QueryHandler {
                 template.getMetadataOptions(),
                 template.effectiveSecurityGroupIds(),
                 new ArrayList<>(tags.values()),
-                template.getBlockDeviceMappings(), template.getCapacityReservationSpecification());
+                template.getBlockDeviceMappings(), template.getCapacityReservationSpecification(), interfaceTags, volumeTags);
     }
 
     /**
@@ -1318,14 +1314,22 @@ public class Ec2QueryHandler {
         return null;
     }
 
-    private record FleetLaunch(String launchTemplateId, String launchTemplateName, String launchTemplateVersion,
+    record FleetLaunch(String launchTemplateId, String launchTemplateName, String launchTemplateVersion,
                                String instanceType, String imageId, String subnetId, String availabilityZone,
                                String keyName, String userData, String encodedUserData, String iamInstanceProfileArn,
                                Boolean associatePublicIpAddress,
                                LaunchTemplateData.MetadataOptions metadataOptions,
                                List<String> securityGroupIds, List<Tag> instanceTags,
                                List<LaunchTemplateData.BlockDeviceMapping> blockDeviceMappings,
-                               LaunchTemplateData.CapacityReservationSpecification capacityReservationSpecification) {}
+                               LaunchTemplateData.CapacityReservationSpecification capacityReservationSpecification,
+                               List<Tag> networkInterfaceTags, List<Tag> volumeTags) {
+        Ec2RunInstancesRequest request(boolean spot) {
+            return new Ec2RunInstancesRequest(imageId, instanceType, 1, 1, keyName, securityGroupIds, subnetId,
+                    null, instanceTags, userData, iamInstanceProfileArn, associatePublicIpAddress, null, 0,
+                    metadataOptions, null, encodedUserData, false, null, null, blockDeviceMappings, spot,
+                    null, capacityReservationSpecification, null, networkInterfaceTags, volumeTags, launchTemplateId);
+        }
+    }
 
     private record FleetLaunchKey(String launchTemplateId, String launchTemplateName, String launchTemplateVersion,
                                   String instanceType, String imageId, String subnetId, String availabilityZone) {

@@ -91,7 +91,7 @@ final class TagOnCreate {
         JsonNode body = form.isEmpty() ? PassedRoles.jsonBody(ctx) : null;
         PreparedRequest prepared = PreparedRequest.from(ctx);
         if (prepared != null) {
-            List<TagSet> effective = prepared.tags().entrySet().stream()
+            List<TagSet> effective = prepared.tagSets().stream().flatMap(tags -> tags.entrySet().stream())
                     .filter(set -> !set.getValue().isEmpty())
                     .map(set -> new TagSet(set.getKey(), set.getValue())).toList();
             return effective.isEmpty() ? Optional.empty() : Optional.of(new Tagging(entry.tagging(), effective,

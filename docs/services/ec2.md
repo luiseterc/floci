@@ -2,6 +2,21 @@
 
 **Protocol:** EC2 Query (XML) — `POST http://localhost:4566/` with `Action=` parameter
 
+## Instant fleet IAM authorization
+
+`CreateFleet` resolves every launch template and override before authorizing the
+fleet and its effective launch resources. Each alternative must satisfy its own
+instance-type, image-owner, stored template-tag, and creation-tag conditions.
+An unauthorized later override denies the entire request before any instance is
+launched. The authorized plans are reused for execution and their network/image
+ownership/volume facts are checked again before allocation.
+
+Top-level fleet, instance, volume, and interface tags remain separate. Instance,
+volume, and interface tags inherit template defaults and apply explicit request
+overrides. Each tagged type requires `CreateTags`; an authorized dry run creates
+no instances. Only the existing synchronous `instant` fleet mode is supported.
+The emulator still does not persist a separate long-lived fleet resource.
+
 ## Instance IAM authorization
 
 With IAM enforcement enabled, modeled instance-list operations, including `StartInstances`, `StopInstances`, `TerminateInstances`, and `RebootInstances`, authorize each requested instance ARN before changing any instance state.

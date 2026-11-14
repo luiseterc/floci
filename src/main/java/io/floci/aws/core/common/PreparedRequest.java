@@ -3,6 +3,7 @@ package io.floci.aws.core.common;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.container.ContainerRequestContext;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,14 @@ public interface PreparedRequest {
     /** Effective creation tags after the service resolves inherited defaults and overrides. */
     Map<String, Map<String, String>> tags();
 
+    default List<Map<String, Map<String, String>>> tagSets() {
+        return List.of(tags());
+    }
+
+    default List<Map<String, List<String>>> contexts(String type, String resource) {
+        return List.of(context(type, resource));
+    }
+
     /** Facts about one selected resource, including its own tags, never another resource's tags. */
     Map<String, List<String>> context(String type, String resource);
 
@@ -26,11 +35,11 @@ public interface PreparedRequest {
         return context.getProperty(PROPERTY) instanceof PreparedRequest prepared ? prepared : null;
     }
 
-    static Map<String, List<String>> withContext(ContainerRequestContext request, String operation,
+    static List<Map<String, List<String>>> withContexts(ContainerRequestContext request, String operation,
                                                   String resource, Map<String, List<String>> base) {
         PreparedRequest prepared = from(request);
         if (prepared == null || !AwsArnUtils.isArn(resource)) {
-            return base;
+            return Collections.singletonList(base);
         }
         String namespace = operation.substring(0, operation.indexOf(':'));
         Map<String, RequestResourceMembers.ArnFormat> formats = RequestResourceMembers.table().formats()
@@ -38,12 +47,15 @@ public interface PreparedRequest {
         for (String type : RequestResourceMembers.table().types().getOrDefault(operation, List.of())) {
             RequestResourceMembers.ArnFormat format = formats.get(type);
             if (format != null && format.pattern().matcher(resource).matches()) {
-                Map<String, List<String>> result = base == null ? new LinkedHashMap<>() : new LinkedHashMap<>(base);
-                result.keySet().removeIf(key -> key.startsWith("aws:RequestTag/") || "aws:TagKeys".equals(key));
-                result.putAll(prepared.context(type, resource));
-                return result;
+                return prepared.contexts(type, resource).stream().map(facts -> {
+                    Map<String, List<String>> result = base == null ? new LinkedHashMap<String, List<String>>()
+                            : new LinkedHashMap<>(base);
+                    result.keySet().removeIf(key -> key.startsWith("aws:RequestTag/") || "aws:TagKeys".equals(key));
+                    result.putAll(facts);
+                    return result;
+                }).toList();
             }
         }
-        return base;
+        return Collections.singletonList(base);
     }
 }

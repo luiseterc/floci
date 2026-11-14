@@ -30,9 +30,13 @@ public record Ec2RunInstancesRequest(
     }
 
     Reservation run(Ec2Service service, String region) {
+        return run(service, region, null);
+    }
+
+    Reservation run(Ec2Service service, String region, String availabilityZone) {
         Reservation result = service.runInstances(region, imageId, instanceType, minCount, maxCount,
                 keyName, securityGroupIds, subnetId, clientToken, instanceTags, userData, iamInstanceProfileArn,
-                associatePublicIp, networkInterfaceId, networkInterfaceDeviceIndex, null, metadataOptions,
+                associatePublicIp, networkInterfaceId, networkInterfaceDeviceIndex, availabilityZone, metadataOptions,
                 creditSpecificationCpuCredits, encodedUserData, dryRun, hostId, tenancy, blockDeviceMappings,
                 spot, privateIpAddress, capacitySpecification);
         if (ebsOptimized != null) {

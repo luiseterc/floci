@@ -16,6 +16,7 @@ import io.floci.aws.core.common.ContainerTeardown;
 import io.floci.aws.core.common.Digests;
 import io.floci.aws.core.common.PaginatedResult;
 import io.floci.aws.core.common.Pagination;
+import io.floci.aws.core.common.PreparedRequest;
 import io.floci.aws.core.common.RequestContext;
 import io.floci.aws.core.common.RequestScopes;
 import io.floci.aws.core.common.Resettable;
@@ -9275,6 +9276,33 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
         }
     }
 
+    Ec2FleetPreparation.Fleet preparedFleet() {
+        if (requestContextInstance == null || !requestContextInstance.isResolvable()) {
+            return null;
+        }
+        try {
+            return requestContextInstance.get().getPreparedRequest() instanceof Ec2FleetPreparation.Fleet fleet
+                    ? fleet : null;
+        } catch (ContextNotActiveException ignored) {
+            return null;
+        }
+    }
+
+    Reservation runFleetLaunch(String region, Ec2RunInstancesRequest request, String availabilityZone,
+                               Ec2LaunchPreparation.Launch authorized) {
+        if (authorized == null) {
+            return request.run(this, region, availabilityZone);
+        }
+        RequestContext context = requestContextInstance.get();
+        PreparedRequest previous = context.getPreparedRequest();
+        context.setPreparedRequest(authorized);
+        try {
+            return request.run(this, region, availabilityZone);
+        } finally {
+            context.setPreparedRequest(previous);
+        }
+    }
+
     /** Placement facts used both for a launch preview and for execution, without initializing resources. */
     public record LaunchNetwork(Subnet subnet, NetworkInterface suppliedInterface, String vpcId,
                                 String availabilityZone, List<GroupIdentifier> groups) {
@@ -9408,10 +9436,13 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
     }
 
     public LaunchPreview previewRunInstances(String region, Ec2RunInstancesRequest request) {
+        return previewRunInstances(region, request, null);
+    }
+
+    LaunchPreview previewRunInstances(String region, Ec2RunInstancesRequest request, String availabilityZone) {
         if (request.imageId() == null || request.imageId().isBlank()) {
             throw new AwsException("MissingParameter", "The request must contain the parameter ImageId", 400);
         }
-        String availabilityZone = null;
         if (request.hostId() != null && !request.hostId().isBlank()
                 && (request.subnetId() == null || request.subnetId().isBlank())
                 && (request.networkInterfaceId() == null || request.networkInterfaceId().isBlank())) {

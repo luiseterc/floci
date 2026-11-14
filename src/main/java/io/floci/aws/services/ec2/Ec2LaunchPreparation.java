@@ -90,14 +90,14 @@ public class Ec2LaunchPreparation implements RequestPreparation {
         }
     }
 
-    private static List<String> networkIdentity(Ec2Service.LaunchNetwork network) {
+    static List<String> networkIdentity(Ec2Service.LaunchNetwork network) {
         return List.of(network.subnet() == null ? "" : network.subnet().getSubnetId(), network.vpcId(),
                 network.availabilityZone(), network.suppliedInterface() == null ? ""
                         : network.suppliedInterface().getNetworkInterfaceId(),
                 String.join(",", network.groups().stream().map(GroupIdentifier::getGroupId).sorted().toList()));
     }
 
-    private static JsonNode projection(Ec2RunInstancesRequest request, Ec2Service.LaunchPreview preview) {
+    static JsonNode projection(Ec2RunInstancesRequest request, Ec2Service.LaunchPreview preview) {
         ObjectNode root = JsonNodeFactory.instance.objectNode();
         ObjectNode input = root.putObject("input");
         put(input, "KeyName", request.keyName());

@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1308,24 +1309,28 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
                     taggedContext = conditionContextResolver.withEc2ResourceTags(
                             credentialScope, operationAction, resource, region, accountId, targetContext);
                 }
-                taggedContext = PreparedRequest.withContext(ctx, operationAction, resource, taggedContext);
-                Map<String, List<String>> effectiveContext = IamConditionContextResolver.withGlobalContext(
-                        taggedContext, resource, region, accountId, resourceOwnerAccountId, action);
-                ResourcePolicyDecision resourcePolicyDecision = evaluator.evaluateResourcePolicyFor(
-                        effectiveResourcePolicies, principal, action, resource, effectiveContext);
-                Decision decision = evaluator.evaluateResolvedResourcePolicy(
-                        caller, resourcePolicyDecision, accountRelationship, action, resource, effectiveContext);
-                if (decision != Decision.DENY) {
-                    continue;
+                for (Map<String, List<String>> preparedContext
+                        : action.equals(operationAction)
+                                ? PreparedRequest.withContexts(ctx, operationAction, resource, taggedContext)
+                                : Collections.singletonList(taggedContext)) {
+                    Map<String, List<String>> effectiveContext = IamConditionContextResolver.withGlobalContext(
+                            preparedContext, resource, region, accountId, resourceOwnerAccountId, action);
+                    ResourcePolicyDecision resourcePolicyDecision = evaluator.evaluateResourcePolicyFor(
+                            effectiveResourcePolicies, principal, action, resource, effectiveContext);
+                    Decision decision = evaluator.evaluateResolvedResourcePolicy(
+                            caller, resourcePolicyDecision, accountRelationship, action, resource, effectiveContext);
+                    if (decision != Decision.DENY) {
+                        continue;
+                    }
+                    LOG.infov("IAM enforcement DENY: akid={0} action={1} resource={2}", akid, action, resource);
+                    String denyMessage = "User: " + AwsArnUtils.Arn.global(requestPartition(), "iam", accountId, "user/" + akid)
+                            + " is not authorized to perform: " + action
+                            + " on resource: \"" + resource + "\""
+                            + " " + PolicyType.IDENTITY_BASED_POLICY.noAllow(action);
+                    emitS3DenialIfApplicable(akid, operationAction, resource, ctx, region, denyMessage);
+                    ctx.abortWith(accessDeniedForRequest(action, credentialScope, ctx, resource));
+                    return true;
                 }
-                LOG.infov("IAM enforcement DENY: akid={0} action={1} resource={2}", akid, action, resource);
-                String denyMessage = "User: " + AwsArnUtils.Arn.global(requestPartition(), "iam", accountId, "user/" + akid)
-                        + " is not authorized to perform: " + action
-                        + " on resource: \"" + resource + "\""
-                        + " " + PolicyType.IDENTITY_BASED_POLICY.noAllow(action);
-                emitS3DenialIfApplicable(akid, operationAction, resource, ctx, region, denyMessage);
-                ctx.abortWith(accessDeniedForRequest(action, credentialScope, ctx, resource));
-                return true;
             }
         }
         return false;
