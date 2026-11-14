@@ -15640,23 +15640,26 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
     }
 
     /**
-     * The resource of {@code type} EC2 holds under {@code id} for the caller, as its Describe operation answers it,
-     * which the IAM condition keys the request-resources table reads from a resource's members are valued from: a
-     * network interface of any kind, stored, held by an instance or owned by an endpoint or a NAT gateway. Empty for a
-     * type it does not answer for and an id it holds nothing under, which the request then fails on. Reads only: it
-     * creates no default resources.
+     * The resources of {@code type} EC2 holds for the caller under {@code ids}, keyed by id, as its Describe operation
+     * answers them, which the IAM condition keys the request-resources table reads from a resource's members are
+     * valued from: a network interface of any kind, stored, held by an instance or owned by an endpoint or a NAT
+     * gateway. All of them come from one pass over the stores, so a request naming many costs no more lookups than one
+     * naming a single resource. Empty for a type it does not answer for. An id it holds nothing under is absent, and
+     * the request fails on it. Reads only: it creates no default resources.
      */
-    public Optional<Object> heldResource(String region, String type, String id) {
-        if (!"network-interface".equals(type)) {
-            return Optional.empty();
+    public Map<String, Object> heldResources(String region, String type, Collection<String> ids) {
+        if (!"network-interface".equals(type) || ids.isEmpty()) {
+            return Map.of();
         }
-        try {
-            return describeNetworkInterfaces(callerAccountId(), region, List.of(id), List.of(), 0, null, false)
-                    .networkInterfaces().stream().findFirst().map(Object.class::cast);
-        } catch (AwsException expected) {
-            // A malformed id or one naming no interface: the request is refused on it, so it carries no keys.
-            return Optional.empty();
-        }
+        // The id filter rather than the id list: a filter leaves out what it does not match, where an id the store
+        // lacks would fail the whole lookup with InvalidNetworkInterfaceID.NotFound.
+        Map<String, Object> held = new HashMap<>();
+        describeNetworkInterfaces(callerAccountId(), region, List.of(),
+                List.of(Map.entry("network-interface-id", List.copyOf(ids))), 0, null, false)
+                .networkInterfaces().stream()
+                .filter(ni -> ids.contains(ni.getNetworkInterfaceId()))
+                .forEach(ni -> held.put(ni.getNetworkInterfaceId(), ni));
+        return held;
     }
 
     private NetworkInterfaceListResult describeNetworkInterfaces(String accountId, String region,
