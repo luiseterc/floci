@@ -11,6 +11,17 @@
       "ec2-instance-connect:privateIpAddress",
       "ec2-instance-connect:remotePort"
     ],
+    "eks:CreateCluster": [
+      "eks:authenticationMode",
+      "eks:bootstrapClusterCreatorAdminPermissions",
+      "eks:endpointPrivateAccess",
+      "eks:endpointPublicAccess"
+    ],
+    "eks:UpdateClusterConfig": [
+      "eks:authenticationMode",
+      "eks:endpointPrivateAccess",
+      "eks:endpointPublicAccess"
+    ],
     "lambda:CreateWebFunction": [
       "lambda:Request/WebFunctionAuthType"
     ],
@@ -47,6 +58,31 @@
       ],
       "ec2-instance-connect:remotePort": [
         "remotePort"
+      ]
+    },
+    "eks:CreateCluster": {
+      "eks:authenticationMode": [
+        "accessConfig.authenticationMode"
+      ],
+      "eks:bootstrapClusterCreatorAdminPermissions": [
+        "accessConfig.bootstrapClusterCreatorAdminPermissions"
+      ],
+      "eks:endpointPrivateAccess": [
+        "resourcesVpcConfig.endpointPrivateAccess"
+      ],
+      "eks:endpointPublicAccess": [
+        "resourcesVpcConfig.endpointPublicAccess"
+      ]
+    },
+    "eks:UpdateClusterConfig": {
+      "eks:authenticationMode": [
+        "accessConfig.authenticationMode"
+      ],
+      "eks:endpointPrivateAccess": [
+        "resourcesVpcConfig.endpointPrivateAccess"
+      ],
+      "eks:endpointPublicAccess": [
+        "resourcesVpcConfig.endpointPublicAccess"
       ]
     },
     "lambda:CreateWebFunction": {

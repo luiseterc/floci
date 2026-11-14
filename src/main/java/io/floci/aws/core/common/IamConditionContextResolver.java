@@ -160,6 +160,7 @@ public class IamConditionContextResolver {
         return switch (credentialScope) {
             case "s3" -> s3ConditionContext(action, ctx);
             case "ec2" -> ec2ConditionContext(action, ctx);
+            case "eks" -> eksConditionContext(action, ctx);
             case "dynamodb" -> dynamoDbConditionContext(action, ctx);
             case "iam" -> iamConditionContext(action, ctx);
             case "logs" -> logsConditionContext(action, ctx);
@@ -168,6 +169,18 @@ public class IamConditionContextResolver {
                     : requestConditions(action, formParameters(ctx)::get);
             default -> null;
         };
+    }
+
+    /** Explicit request attributes only: omitted update fields must not inherit the cluster's stored values. */
+    private Map<String, List<String>> eksConditionContext(String action, ContainerRequestContext ctx) {
+        if (RequestConditionKeys.requestKeys(action).isEmpty()) {
+            return null;
+        }
+        JsonNode body = bufferedJsonBody(ctx);
+        return body == null ? null : requestConditions(action, member -> {
+            JsonNode value = body.at("/" + member.replace('.', '/'));
+            return value.isTextual() || value.isBoolean() ? value.asText() : null;
+        });
     }
 
     /** Logs tag operations and group mutations use the handler's resource and request scope. */
