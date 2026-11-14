@@ -2748,7 +2748,9 @@ the parent VPC uses its own stored ownership tags.
 security group separately. The generated EC2 Query names preserve SDK list serialization
 (for example, `Groups` is sent as `SecurityGroupId.N`). `ec2:AllocateAddress` checks
 the new elastic IP and any supplied address pool; its created resource type is derived
-from botocore's operation description and returned allocation ID.
+from botocore's operation description and returned allocation ID. `ec2:CreateNatGateway`
+checks the new gateway and each supplied subnet, elastic IP and VPC separately, including
+stored ownership tags on its existing parents.
 
 The promoted network mutation operations include subnet attribute updates, route
 creation/replacement/deletion and association, gateway attachment/detachment,
