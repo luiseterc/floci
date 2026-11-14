@@ -216,3 +216,11 @@ the record. DELETE still requires matching record values and routing properties.
 - DNSSEC (key signing keys, enabling/disabling)
 - `TestDNSAnswer`
 - Public authoritative record types other than simple TXT, NS, and SOA; public routing policies, delegation referrals, and DNS-over-TCP
+
+### Private VPC IAM conditions
+
+With IAM enforcement enabled, private zone creation, VPC association and disassociation,
+association authorization creation and deletion, and `ListHostedZonesByVPC` expose
+`route53:VPCs` as `VPCId=<id>,VPCRegion=<region>`. The value comes from the VPC the
+operation actually reads, not the client's signing region. Public zone creation leaves
+this condition absent. String, set and Null conditions use the normal IAM evaluator.

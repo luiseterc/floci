@@ -19,6 +19,7 @@ import io.floci.aws.services.iam.ResourceArnBuilder;
 import io.floci.aws.services.iam.model.IamRole;
 import io.floci.aws.services.iam.model.IamUser;
 import io.floci.aws.services.lambdaweb.LambdaWebService;
+import io.floci.aws.services.route53.Route53VpcConditions;
 import io.floci.aws.services.s3.S3ConditionKeys;
 import io.floci.aws.services.s3.S3ControlTagConditionKeys;
 import io.floci.aws.services.s3.S3ObjectActions;
@@ -167,6 +168,9 @@ public class IamConditionContextResolver {
             case "dynamodb" -> dynamoDbConditionContext(action, ctx);
             case "iam" -> iamConditionContext(action, ctx);
             case "logs" -> logsConditionContext(action, ctx);
+            case "route53" -> Route53VpcConditions.supports(action)
+                    ? Route53VpcConditions.resolve(action, bodyText(ctx), ctx.getUriInfo().getQueryParameters())
+                    : requestMemberConditions(action, ctx);
             case "lambda" -> lambdaConditionContext(action, ctx);
             default -> requestMemberConditions(action, ctx);
         };
