@@ -1238,10 +1238,20 @@ profile.
 | AttachNetworkInterface | Attaches an available standalone ENI to a running or stopped instance at a device index. |
 | DetachNetworkInterface | Detaches a standalone ENI by attachment ID, returning it to `available`. |
 | DeleteNetworkInterface | Deletes a standalone ENI. Fails while the ENI is still attached, matching AWS. |
+| ModifyNetworkInterfaceAttribute | Updates description, source/destination check, security groups, or attachment deletion on termination. |
 
 A standalone ENI created via `CreateNetworkInterface` can also be handed to `RunInstances` as an instance's primary interface (`NetworkInterface.1.NetworkInterfaceId` / `NetworkInterface.1.DeviceIndex`) instead of letting the instance create its own implicit one, the pattern Terraform's `aws_instance` resource uses for `network_interface { network_interface_id = ... }`. AWS only allows this for a single instance per launch call; `RunInstances` rejects it otherwise with `InvalidParameterCombination`.
 
-`ModifyNetworkInterfaceAttribute` is not implemented: no example in the corpus that needed `CreateNetworkInterface` was found to need it. A route table's `CreateRoute` with a `NetworkInterfaceId` target is accepted but not recorded, since `Route` does not yet model an ENI target; a subsequent `plan` against such a route may show drift.
+`ModifyNetworkInterfaceAttribute` supports one attribute per request: description, source/destination
+check, security-group replacement, or an attachment's `DeleteOnTermination` flag. It validates the
+attachment identity and security-group VPC before mutation; authorized `DryRun` requests do not
+change either interface or instance state. Launch-created primary interfaces are supported too.
+`DescribeInstances` and `DescribeNetworkInterfaces` report the same attachment deletion flag,
+and termination honors it. ENA SRD, connection-tracking, public-IP association, primary IPv6,
+and associated-subnet changes remain unsupported. Source/destination check is stored metadata;
+it does not reconfigure the Docker host's forwarding rules.
+
+A route table's `CreateRoute` with a `NetworkInterfaceId` target is accepted but not recorded, since `Route` does not yet model an ENI target; a subsequent `plan` against such a route may show drift.
 
 ### Volumes
 

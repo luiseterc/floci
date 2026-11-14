@@ -345,6 +345,7 @@ public class Ec2QueryHandler {
                 case "DescribeNetworkInterfaces" -> handleDescribeNetworkInterfaces(params, region);
                 case "CreateNetworkInterface" -> handleCreateNetworkInterface(params, region);
                 case "DeleteNetworkInterface" -> handleDeleteNetworkInterface(params, region);
+                case "ModifyNetworkInterfaceAttribute" -> handleModifyNetworkInterfaceAttribute(params, region);
                 case "AttachNetworkInterface" -> handleAttachNetworkInterface(params, region);
                 case "DetachNetworkInterface" -> handleDetachNetworkInterface(params, region);
                 // Volumes
@@ -5490,6 +5491,33 @@ public class Ec2QueryHandler {
         return booleanResponse("DeleteNetworkInterface");
     }
 
+    private Response handleModifyNetworkInterfaceAttribute(MultivaluedMap<String, String> p, String region) {
+        for (String name : p.keySet()) {
+            if (List.of("AssociatePublicIpAddress", "EnablePrimaryIpv6").contains(name)
+                    || name.startsWith("AssociatedSubnetId.") || name.startsWith("ConnectionTrackingSpecification.")
+                    || name.startsWith("EnaSrdSpecification.")) {
+                throw new AwsException("UnsupportedOperation", "This network interface attribute is not supported", 400);
+            }
+        }
+        Boolean sourceDest = interfaceBoolean(p, "SourceDestCheck.Value");
+        Boolean deleteOnTermination = interfaceBoolean(p, "Attachment.DeleteOnTermination");
+        service.modifyNetworkInterfaceAttribute(region, p.getFirst("NetworkInterfaceId"),
+                p.getFirst("Description.Value"), sourceDest, getList(p, "SecurityGroupId"),
+                p.getFirst("Attachment.AttachmentId"), deleteOnTermination, dryRun(p));
+        return booleanResponse("ModifyNetworkInterfaceAttribute");
+    }
+
+    private Boolean interfaceBoolean(MultivaluedMap<String, String> p, String key) {
+        String value = p.getFirst(key);
+        if (value == null) {
+            return null;
+        }
+        if (!"true".equals(value) && !"false".equals(value)) {
+            throw new AwsException("InvalidParameterValue", "Expected a boolean interface attribute", 400);
+        }
+        return Boolean.valueOf(value);
+    }
+
     private Response handleAttachNetworkInterface(MultivaluedMap<String, String> p, String region) {
         String networkInterfaceId = p.getFirst("NetworkInterfaceId");
         String instanceId = p.getFirst("InstanceId");
@@ -5602,7 +5630,7 @@ public class Ec2QueryHandler {
             if (eni.getAttachTime() != null) {
                 xml.elem("attachTime", eni.getAttachTime());
             }
-            xml.elem("deleteOnTermination", "true")
+            xml.elem("deleteOnTermination", String.valueOf(service.instanceInterfaceDeleteOnTermination(inst, eni)))
                     .end("attachment")
                     .start("privateIpAddressesSet")
                     .start("item")

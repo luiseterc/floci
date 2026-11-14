@@ -15668,56 +15668,7 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
                     continue;
                 }
                 foundIds.add(eni.getNetworkInterfaceId());
-                NetworkInterface ni = new NetworkInterface();
-                ni.setNetworkInterfaceId(eni.getNetworkInterfaceId());
-                ni.setSubnetId(eni.getSubnetId());
-                ni.setVpcId(eni.getVpcId());
-                ni.setDescription(eni.getDescription());
-                ni.setOwnerId(eni.getOwnerId());
-                ni.setStatus(eni.getStatus());
-                ni.setMacAddress(eni.getMacAddress());
-                ni.setPrivateIpAddress(eni.getPrivateIpAddress());
-                ni.setPrivateDnsName(eni.getPrivateDnsName());
-                ni.setSourceDestCheck(eni.isSourceDestCheck());
-                ni.setGroups(new ArrayList<>(eni.getGroups()));
-                // Phase 3: availability zone, tags, interface type
-                if (inst.getPlacement() != null) {
-                    ni.setAvailabilityZone(inst.getPlacement().getAvailabilityZone());
-                }
-                // A network interface's tags are its OWN, never the instance's. AWS tags
-                // exactly the resource types a RunInstances TagSpecification names, so an
-                // interface created for an instance whose specification said
-                // ResourceType=instance carries no tags until something tags the eni- id
-                // itself - and DescribeTags never listed these copied tags either, so
-                // DescribeNetworkInterfaces disagreed with DescribeTags about the same
-                // resource. Read the interface's own entry in the tag store instead:
-                // CreateTags on the eni- id writes it, and so does a RunInstances
-                // TagSpecification with ResourceType=network-interface.
-                Optional<List<Tag>> tagList = tagsOf(safeAccount, region, eni.getNetworkInterfaceId());
-                ni.getTagSet().addAll(tagList.orElse(List.of()));
-
-                NetworkInterfaceAttachment att = new NetworkInterfaceAttachment();
-                att.setAttachmentId(eni.getAttachmentId());
-                att.setDeviceIndex(eni.getDeviceIndex());
-                att.setStatus("attached");
-                att.setInstanceId(inst.getInstanceId());
-                att.setInstanceOwnerId(eni.getOwnerId());
-                // Phase 3: attachTime from instance launchTime, deleteOnTermination
-                if (inst.getLaunchTime() != null) {
-                    att.setAttachTime(ISO_FMT.format(inst.getLaunchTime()));
-                }
-                att.setDeleteOnTermination(true);
-                ni.setAttachment(att);
-
-                // Phase 3: privateIpAddressesSet - primary IP
-                NetworkInterfacePrivateIpAddress primaryIp = new NetworkInterfacePrivateIpAddress();
-                primaryIp.setPrivateIpAddress(eni.getPrivateIpAddress());
-                primaryIp.setPrivateDnsName(eni.getPrivateDnsName());
-                primaryIp.setPrimary(true);
-                // Look up EIP association for this instance
-                addressForInstance(inst.getInstanceId()).ifPresent(addr ->
-                        primaryIp.setAssociation(networkInterfaceAssociation(addr, eni.getOwnerId())));
-                ni.getPrivateIpAddresses().add(primaryIp);
+                NetworkInterface ni = instanceInterfaceModel(safeAccount, region, inst, eni);
 
                 // Phase 4: apply filters
                 if (!matchesFilters(ni, filters, region)) {
@@ -15855,6 +15806,170 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
         }
 
         return new NetworkInterfaceListResult(result, null);
+    }
+
+    private NetworkInterface instanceInterfaceModel(String safeAccount, String region, Instance inst,
+                                                     InstanceNetworkInterface eni) {
+        NetworkInterface ni = new NetworkInterface();
+        ni.setNetworkInterfaceId(eni.getNetworkInterfaceId());
+        ni.setSubnetId(eni.getSubnetId());
+        ni.setVpcId(eni.getVpcId());
+        ni.setDescription(eni.getDescription());
+        ni.setOwnerId(eni.getOwnerId());
+        ni.setStatus(eni.getStatus());
+        ni.setMacAddress(eni.getMacAddress());
+        ni.setPrivateIpAddress(eni.getPrivateIpAddress());
+        ni.setPrivateDnsName(eni.getPrivateDnsName());
+        ni.setSourceDestCheck(eni.isSourceDestCheck());
+        ni.setGroups(new ArrayList<>(eni.getGroups()));
+        // Phase 3: availability zone, tags, interface type
+        if (inst.getPlacement() != null) {
+            ni.setAvailabilityZone(inst.getPlacement().getAvailabilityZone());
+        }
+        // A network interface's tags are its OWN, never the instance's. AWS tags
+        // exactly the resource types a RunInstances TagSpecification names, so an
+        // interface created for an instance whose specification said
+        // ResourceType=instance carries no tags until something tags the eni- id
+        // itself - and DescribeTags never listed these copied tags either, so
+        // DescribeNetworkInterfaces disagreed with DescribeTags about the same
+        // resource. Read the interface's own entry in the tag store instead:
+        // CreateTags on the eni- id writes it, and so does a RunInstances
+        // TagSpecification with ResourceType=network-interface.
+        Optional<List<Tag>> tagList = tagsOf(safeAccount, region, eni.getNetworkInterfaceId());
+        ni.getTagSet().addAll(tagList.orElse(List.of()));
+
+        NetworkInterfaceAttachment att = new NetworkInterfaceAttachment();
+        att.setAttachmentId(eni.getAttachmentId());
+        att.setDeviceIndex(eni.getDeviceIndex());
+        att.setStatus("attached");
+        att.setInstanceId(inst.getInstanceId());
+        att.setInstanceOwnerId(eni.getOwnerId());
+        // Phase 3: attachTime from instance launchTime, deleteOnTermination
+        if (inst.getLaunchTime() != null) {
+            att.setAttachTime(ISO_FMT.format(inst.getLaunchTime()));
+        }
+        att.setDeleteOnTermination(true);
+        ni.setAttachment(att);
+
+        // Phase 3: privateIpAddressesSet - primary IP
+        NetworkInterfacePrivateIpAddress primaryIp = new NetworkInterfacePrivateIpAddress();
+        primaryIp.setPrivateIpAddress(eni.getPrivateIpAddress());
+        primaryIp.setPrivateDnsName(eni.getPrivateDnsName());
+        primaryIp.setPrimary(true);
+        // Look up EIP association for this instance
+        addressForInstance(inst.getInstanceId()).ifPresent(addr ->
+                primaryIp.setAssociation(networkInterfaceAssociation(addr, eni.getOwnerId())));
+        ni.getPrivateIpAddresses().add(primaryIp);
+        return ni;
+    }
+
+    /** Attachment flags in DescribeInstances agree with the stored interface when it has one. */
+    public boolean instanceInterfaceDeleteOnTermination(Instance instance, InstanceNetworkInterface attached) {
+        String account = instance.getOwnerId() == null ? callerAccountId() : instance.getOwnerId();
+        Optional<NetworkInterface> stored = networkInterfaces instanceof AccountAwareStorageBackend<NetworkInterface> aware
+                ? aware.getForAccount(account, key(instance.getRegion(), attached.getNetworkInterfaceId()))
+                : networkInterfaces.get(key(instance.getRegion(), attached.getNetworkInterfaceId()));
+        return stored.filter(ni -> ni.getAttachment() != null
+                        && instance.getInstanceId().equals(ni.getAttachment().getInstanceId()))
+                .map(ni -> ni.getAttachment().isDeleteOnTermination()).orElse(true);
+    }
+
+    private NetworkInterface interfaceForAttributeChange(String region, String interfaceId) {
+        NetworkInterface stored = networkInterfaces.get(key(region, interfaceId)).orElse(null);
+        if (stored != null) {
+            return stored;
+        }
+        for (Instance instance : instances.scan(k -> k.startsWith(region + "::"))) {
+            if (instance.getState() == null || "terminated".equals(instance.getState().getName())) {
+                continue;
+            }
+            for (InstanceNetworkInterface attached : instance.getNetworkInterfaces()) {
+                if (interfaceId.equals(attached.getNetworkInterfaceId())) {
+                    return instanceInterfaceModel(callerAccountId(), region, instance, attached);
+                }
+            }
+        }
+        throw new AwsException("InvalidNetworkInterfaceID.NotFound",
+                "The network interface '" + interfaceId + "' does not exist", 400);
+    }
+
+    /** Validates a single attribute before changing either interface or attached-instance state. */
+    public void modifyNetworkInterfaceAttribute(String region, String interfaceId, String description,
+                                                Boolean sourceDestCheck, List<String> groupIds,
+                                                String attachmentId, Boolean deleteOnTermination, boolean dryRun) {
+        if (interfaceId == null || interfaceId.isBlank()) {
+            throw new AwsException("MissingParameter", "NetworkInterfaceId is required", 400);
+        }
+        int attributes = (description == null ? 0 : 1) + (sourceDestCheck == null ? 0 : 1)
+                + (groupIds.isEmpty() ? 0 : 1) + (attachmentId == null && deleteOnTermination == null ? 0 : 1);
+        if (attributes != 1) {
+            throw new AwsException("InvalidParameterCombination", "Specify exactly one interface attribute", 400);
+        }
+        synchronized (attachmentTopologyLock(region)) {
+            NetworkInterface ni = interfaceForAttributeChange(region, interfaceId);
+            if (ni.isRequesterManaged()) {
+                throw new AwsException("OperationNotPermitted", "Cannot modify a requester-managed interface", 400);
+            }
+            NetworkInterfaceAttachment attachment = ni.getAttachment();
+            Instance attachedInstance = attachment == null ? null : getRequiredInstance(region, attachment.getInstanceId());
+            if (attachedInstance != null && "terminated".equals(attachedInstance.getState().getName())) {
+                throw new AwsException("IncorrectState", "Interface attachment is terminating", 400);
+            }
+            if (attachmentId != null || deleteOnTermination != null) {
+                if (attachmentId == null || deleteOnTermination == null) {
+                    throw new AwsException("MissingParameter", "AttachmentId and DeleteOnTermination are required", 400);
+                }
+                if (attachment == null || !attachmentId.equals(attachment.getAttachmentId())) {
+                    throw new AwsException("InvalidAttachmentID.NotFound", "Attachment does not belong to this interface", 400);
+                }
+            }
+            List<GroupIdentifier> groups = new ArrayList<>();
+            for (String id : new LinkedHashSet<>(groupIds)) {
+                SecurityGroup group = getRequiredSecurityGroup(region, id);
+                if (!Objects.equals(ni.getVpcId(), group.getVpcId())) {
+                    throw new AwsException("InvalidGroup.NotFound", "Security group does not belong to the interface VPC", 400);
+                }
+                groups.add(new GroupIdentifier(group.getGroupId(), group.getGroupName()));
+            }
+            if (dryRun) {
+                throw new AwsException("DryRunOperation", "Request would have succeeded, but DryRun flag is set", 412);
+            }
+            if (!groups.isEmpty() && securityGroupEnforcementEnabled() && !config.services().ec2().mock()) {
+                List<SecurityGroup> current = securityGroups.scan(k -> k.startsWith(region + "::"));
+                Map<String, SecurityGroup> byId = current.stream().collect(Collectors.toMap(
+                        SecurityGroup::getGroupId, Function.identity()));
+                containerManager.updateSecurityGroups(interfaceId, new HashSet<>(groupIds), byId,
+                        policyPrefixLists(region, current));
+            }
+            if (description != null) {
+                ni.setDescription(description);
+            }
+            if (sourceDestCheck != null) {
+                ni.setSourceDestCheck(sourceDestCheck);
+            }
+            if (!groups.isEmpty()) {
+                ni.setGroups(groups);
+            }
+            if (deleteOnTermination != null) {
+                attachment.setDeleteOnTermination(deleteOnTermination);
+            }
+            networkInterfaces.put(key(region, interfaceId), ni);
+            if (attachment != null) {
+                Instance instance = attachedInstance;
+                for (InstanceNetworkInterface attached : instance.getNetworkInterfaces()) {
+                    if (interfaceId.equals(attached.getNetworkInterfaceId())) {
+                        attached.setDescription(ni.getDescription());
+                        attached.setSourceDestCheck(ni.isSourceDestCheck());
+                        attached.setGroups(new ArrayList<>(ni.getGroups()));
+                        if (attached.getDeviceIndex() == 0) {
+                            instance.setSourceDestCheck(ni.isSourceDestCheck());
+                            instance.setSecurityGroups(new ArrayList<>(ni.getGroups()));
+                        }
+                    }
+                }
+                instances.put(key(region, instance.getInstanceId()), instance);
+            }
+        }
     }
 
     /**
