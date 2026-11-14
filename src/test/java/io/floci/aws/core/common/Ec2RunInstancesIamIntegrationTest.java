@@ -13,14 +13,17 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.Ec2Exception;
+import software.amazon.awssdk.services.ec2.model.Image;
 import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.ec2.model.RunInstancesRequest;
 import software.amazon.awssdk.services.ec2.model.TagSpecification;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static io.floci.aws.testing.EnforcementFixtures.auth;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -171,17 +174,33 @@ class Ec2RunInstancesIamIntegrationTest {
     }
 
     @Test
-    void amiOwnerComesFromTheCatalogOrRegisteredImage() {
+    void verifiedPublisherAliasIsUsedForLaunchAuthorization() {
         try (Fixture f = fixture()) {
             String other = grant("Allow", ARN + "*/*", "");
             String image = grant("Allow", "arn:aws:ec2:us-east-1::image/*",
                     "\"StringEquals\":{\"ec2:Owner\":\"amazon\"}");
             f.policy(other + "," + image);
-            denied(() -> f.launch(r -> r.imageId("ami-ubuntu2204")));
+            assertEquals("ami-ubuntu2204", f.launch(r -> r.imageId("ami-ubuntu2204")).imageId());
             denied(() -> f.launch(r -> r.imageId("ami-unregistered")));
             f.launch(r -> {});
             f.policy(other + "," + image.replace("amazon", "099720109477"));
-            assertEquals("ami-ubuntu2204", f.launch(r -> r.imageId("ami-ubuntu2204")).imageId());
+            denied(() -> f.launch(r -> r.imageId("ami-ubuntu2204")));
+        }
+    }
+
+    @Test
+    void ubuntuCatalogSupportsNumericOwnerAndVerifiedPublisherLookups() {
+        try (Fixture f = fixture()) {
+            List<Image> ubuntu = f.admin.describeImages(r -> r.owners("099720109477")).images();
+            assertEquals(5, ubuntu.size());
+            Set<String> verified = f.admin.describeImages(r -> r.owners("amazon"))
+                    .images().stream().map(Image::imageId).collect(Collectors.toSet());
+            for (Image image : ubuntu) {
+                assertEquals("099720109477", image.ownerId());
+                assertEquals("amazon", image.imageOwnerAlias());
+                assertTrue(verified.contains(image.imageId()));
+            }
+            assertTrue(f.admin.describeImages(r -> r.owners("canonical")).images().isEmpty());
         }
     }
 

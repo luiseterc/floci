@@ -10497,20 +10497,19 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
     }
 
     /**
-     * {@code Owner.N} takes the aliases {@code self}, {@code amazon} and {@code aws-marketplace}
-     * beside bare account ids, while {@code imageOwnerId} is always an account id. Only
-     * {@code self} was translated, so an alias matched nothing unless an image happened to be
-     * owned by the literal string.
+     * Owner aliases belong to image metadata, not a single publisher account. Verified
+     * publishers can share the amazon alias while retaining their own numeric owner id.
      */
     private boolean matchesImageOwners(Image image, List<String> owners) {
         if (owners == null || owners.isEmpty()) {
             return true;
         }
         String ownerId = image.getOwnerId();
+        String alias = image.getImageOwnerAlias();
         return owners.contains(ownerId)
                 || (owners.contains("self") && callerAccountId().equals(ownerId))
-                || (owners.contains("amazon") && AMAZON_OWNER_ID.equals(ownerId))
-                || (owners.contains("aws-marketplace") && AWS_MARKETPLACE_OWNER_ID.equals(ownerId));
+                || (alias != null && Set.of("amazon", "aws-marketplace", "aws-backup-vault").contains(alias)
+                    && owners.contains(alias));
     }
 
     /**

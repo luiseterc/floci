@@ -132,7 +132,7 @@ public final class AmiImageTool {
             staged.name = image.aws.name;
             staged.description = "Canonical, Ubuntu, " + image.version + " LTS cloud image";
             staged.ownerId = image.aws.ownerId;
-            staged.imageOwnerAlias = "canonical";
+            staged.imageOwnerAlias = "amazon";
             staged.architecture = awsArchitecture(image.architecture);
             staged.creationDate = image.aws.creationDate;
             staged.rootDeviceType = image.aws.rootDeviceType;

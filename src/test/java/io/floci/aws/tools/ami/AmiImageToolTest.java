@@ -86,6 +86,7 @@ class AmiImageToolTest {
         assertTrue(catalogText.contains("ami-ubuntu2404-cloud-arm64"));
         assertTrue(catalogText.contains("guestRuntime: \"systemd\""));
         assertTrue(catalogText.contains("cloudInit: true"));
+        assertTrue(catalogText.contains("imageOwnerAlias: \"amazon\""));
         assertTrue(catalogText.contains("custom-output/ubuntu-24.04-arm64/provenance.yaml"));
     }
 
