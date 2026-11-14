@@ -738,6 +738,14 @@ public class IamConditionContextResolver {
         if ("ec2:RunInstances".equals(action)) {
             return ec2RunInstancesConditionContext(ctx);
         }
+        if (("ec2:AssignPrivateIpAddresses".equals(action) || "ec2:UnassignPrivateIpAddresses".equals(action))
+                && ec2Service.isResolvable()) {
+            String region = requestContext.getRegion() == null ? config.defaultRegion() : requestContext.getRegion();
+            Map<String, List<String>> conditions = new LinkedHashMap<>();
+            ec2Service.get().privateIpAssignmentContext(region, formParameters(ctx).get("NetworkInterfaceId"))
+                    .forEach((key, value) -> conditions.put(key, List.of(value)));
+            return conditions;
+        }
         RequestResourceMembers.Targets targets = RequestResourceMembers.table().targets().get(action);
         Map<String, List<String>> conditions = new LinkedHashMap<>();
         Map<String, String> form = formParameters(ctx);

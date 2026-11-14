@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.floci.aws.config.EmulatorConfig;
 import io.floci.aws.core.common.AvailabilityZoneIds;
 import io.floci.aws.core.common.AwsArnUtils;
+import io.floci.aws.core.common.AwsArnUtils.Arn;
 import io.floci.aws.core.common.AwsException;
 import io.floci.aws.core.common.AwsPartition;
 import io.floci.aws.core.common.AwsPartitions;
@@ -15949,6 +15950,170 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
         }
     }
 
+    /** Secondary addresses held by the exact attached interface, for DescribeInstances. */
+    public List<NetworkInterfacePrivateIpAddress> instanceInterfaceSecondaryAddresses(Instance instance,
+                                                                                      InstanceNetworkInterface attached) {
+        String account = instance.getOwnerId() == null ? callerAccountId() : instance.getOwnerId();
+        String storeKey = key(instance.getRegion(), attached.getNetworkInterfaceId());
+        Optional<NetworkInterface> stored = networkInterfaces instanceof AccountAwareStorageBackend<NetworkInterface> aware
+                ? aware.getForAccount(account, storeKey) : networkInterfaces.get(storeKey);
+        return stored.filter(ni -> ni.getAttachment() != null
+                        && instance.getInstanceId().equals(ni.getAttachment().getInstanceId()))
+                .map(ni -> ni.getPrivateIpAddresses().stream().filter(ip -> !ip.isPrimary()).toList()).orElse(List.of());
+    }
+
+    /** Current ENI identity for address-operation authorization; never creates defaults or changes state. */
+    public Map<String, String> privateIpAssignmentContext(String region, String interfaceId) {
+        if (interfaceId == null || interfaceId.isBlank()) {
+            return Map.of();
+        }
+        String vpcId = null;
+        List<Tag> interfaceTags = List.of();
+        String account = callerAccountId();
+        NetworkInterface stored = (networkInterfaces instanceof AccountAwareStorageBackend<NetworkInterface> aware
+                ? aware.getForAccount(account, key(region, interfaceId)) : networkInterfaces.get(key(region, interfaceId)))
+                .orElse(null);
+        if (stored != null) {
+            vpcId = stored.getVpcId();
+            interfaceTags = stored.getTagSet();
+        } else {
+            List<Instance> scoped = instances instanceof AccountAwareStorageBackend<Instance> aware
+                    ? aware.scanForAccount(account, k -> k.startsWith(region + "::"))
+                    : instances.scan(k -> k.startsWith(region + "::"));
+            for (Instance instance : scoped) {
+                if (instance.getState() != null && "terminated".equals(instance.getState().getName())) {
+                    continue;
+                }
+                for (InstanceNetworkInterface attached : instance.getNetworkInterfaces()) {
+                    if (interfaceId.equals(attached.getNetworkInterfaceId())) {
+                        vpcId = attached.getVpcId();
+                    }
+                }
+            }
+        }
+        if (vpcId == null) {
+            return Map.of();
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("ec2:Vpc", Arn.of("ec2", region, callerAccountId(), "vpc/" + vpcId).toString());
+        for (Tag tag : tagsOf(account, region, interfaceId).orElse(interfaceTags)) {
+            result.put("aws:ResourceTag/" + tag.getKey(), tag.getValue() == null ? "" : tag.getValue());
+            result.put("ec2:ResourceTag/" + tag.getKey(), tag.getValue() == null ? "" : tag.getValue());
+        }
+        return Map.copyOf(result);
+    }
+
+    /** Assign secondary IPv4 addresses atomically against the shared subnet allocator. */
+    public List<String> assignPrivateIpAddresses(String region, String interfaceId, List<String> requested,
+                                                Integer count, boolean allowReassignment) {
+        if ((requested.isEmpty() && count == null) || (!requested.isEmpty() && count != null)) {
+            throw new AwsException("InvalidParameterCombination",
+                    "Specify either PrivateIpAddress or SecondaryPrivateIpAddressCount", 400);
+        }
+        if (count != null && count < 1) {
+            throw new AwsException("InvalidParameterValue", "SecondaryPrivateIpAddressCount must be positive", 400);
+        }
+        synchronized (attachmentTopologyLock(region)) {
+            synchronized (privateIpAllocationLock) {
+                NetworkInterface target = addressAssignmentTarget(region, interfaceId);
+                Subnet subnet = requireSubnet(region, target.getSubnetId());
+                Set<String> current = target.getPrivateIpAddresses().stream()
+                        .map(NetworkInterfacePrivateIpAddress::getPrivateIpAddress).collect(Collectors.toSet());
+                List<String> assigned = new ArrayList<>();
+                for (String value : requested) {
+                    String address = validateRequestedPrivateIp(value, subnet, null, 1);
+                    if (address.equals(target.getPrivateIpAddress())) {
+                        throw new AwsException("InvalidParameterValue", "The primary address cannot be assigned as secondary", 400);
+                    }
+                    if (assigned.contains(address)) {
+                        throw new AwsException("InvalidParameterValue", "Duplicate private IP address: " + address, 400);
+                    }
+                    if (!current.contains(address)) {
+                        if (allowReassignment && privateIpsTaken(region, target.getSubnetId()).contains(address)) {
+                            throw new AwsException("UnsupportedOperation",
+                                    "Moving an existing private IP address between interfaces is not implemented", 400);
+                        }
+                        requireRequestedPrivateIpFree(region, target.getSubnetId(), address);
+                    }
+                    assigned.add(address);
+                }
+                long additions = count != null ? count : assigned.stream().filter(ip -> !current.contains(ip)).count();
+                if (target.getAttachment() != null && instanceTypeCatalog != null) {
+                    Instance host = getRequiredInstance(region, target.getAttachment().getInstanceId());
+                    instanceTypeCatalog.find(host.getInstanceType()).ifPresent(type -> {
+                        if (current.size() + additions > type.ipv4AddressesPerInterface) {
+                            throw new AwsException("PrivateIpAddressLimitExceeded", "Private IP address limit exceeded", 400);
+                        }
+                    });
+                }
+                if (count != null) {
+                    try {
+                        for (int i = 0; i < count; i++) {
+                            assigned.add(assignPrivateIp(region, target.getSubnetId(), assigned));
+                        }
+                    } catch (AwsException error) {
+                        releasePrivateIps(region, target.getSubnetId(), assigned);
+                        throw error;
+                    }
+                }
+                List<NetworkInterfacePrivateIpAddress> updated = new ArrayList<>(target.getPrivateIpAddresses());
+                for (String address : assigned) {
+                    if (current.add(address)) {
+                        NetworkInterfacePrivateIpAddress secondary = new NetworkInterfacePrivateIpAddress();
+                        secondary.setPrivateIpAddress(address);
+                        secondary.setPrivateDnsName(AwsRegions.ec2PrivateIpDnsName(address, region));
+                        updated.add(secondary);
+                    }
+                }
+                target.setPrivateIpAddresses(updated);
+                networkInterfaces.put(key(region, interfaceId), target);
+                return List.copyOf(assigned);
+            }
+        }
+    }
+
+    public void unassignPrivateIpAddresses(String region, String interfaceId, List<String> requested) {
+        if (requested.isEmpty()) {
+            throw new AwsException("MissingParameter", "The request must contain PrivateIpAddress", 400);
+        }
+        synchronized (attachmentTopologyLock(region)) {
+            synchronized (privateIpAllocationLock) {
+                NetworkInterface target = addressAssignmentTarget(region, interfaceId);
+                Set<String> addresses = new LinkedHashSet<>();
+                for (String value : requested) {
+                    String address = canonicalIpv4(value).orElseThrow(() ->
+                            new AwsException("InvalidParameterValue", "Invalid IPv4 address: " + value, 400));
+                    NetworkInterfacePrivateIpAddress held = target.getPrivateIpAddresses().stream()
+                            .filter(ip -> address.equals(ip.getPrivateIpAddress())).findFirst().orElse(null);
+                    if (held == null || held.isPrimary() || address.equals(target.getPrivateIpAddress())) {
+                        throw new AwsException("InvalidParameterValue", "Address is not a secondary on this interface: " + address, 400);
+                    }
+                    if (held.getAssociation() != null) {
+                        throw new AwsException("UnsupportedOperation", "Unassigning an address with an Elastic IP is not implemented", 400);
+                    }
+                    addresses.add(address);
+                }
+                target.setPrivateIpAddresses(target.getPrivateIpAddresses().stream()
+                        .filter(ip -> !addresses.contains(ip.getPrivateIpAddress())).toList());
+                networkInterfaces.put(key(region, interfaceId), target);
+                releasePrivateIps(region, target.getSubnetId(), addresses);
+            }
+        }
+    }
+
+    /** Includes launch-created primary ENIs; persist their modeled record only after validation succeeds. */
+    private NetworkInterface addressAssignmentTarget(String region, String interfaceId) {
+        if (interfaceId == null || interfaceId.isBlank()) {
+            throw new AwsException("MissingParameter", "The request must contain NetworkInterfaceId", 400);
+        }
+        NetworkInterface target = describeNetworkInterfaces(region, List.of(interfaceId), Map.of())
+                .networkInterfaces().getFirst();
+        if (target.isRequesterManaged()) {
+            throw new AwsException("OperationNotPermitted", "Cannot change a requester-managed interface", 400);
+        }
+        return target;
+    }
+
     /**
      * Deletes a standalone ENI and gives the lease its primary address took back to the VPC
      * network. A requested primary took no lease, so any it carries is a failed launch's, given
@@ -15965,7 +16130,8 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
             }
             releaseInterfaceAddresses(region, networkInterfaceId, true);
             networkInterfaces.delete(key(region, networkInterfaceId));
-            releasePrivateIps(region, ni.getSubnetId(), List.of(ni.getPrivateIpAddress()));
+            releasePrivateIps(region, ni.getSubnetId(), ni.getPrivateIpAddresses().stream()
+                    .map(NetworkInterfacePrivateIpAddress::getPrivateIpAddress).toList());
         }
     }
 
@@ -16127,6 +16293,8 @@ public class Ec2Service implements ContainerTeardown, ResourceProvider, Resettab
             }
             if (deleted) {
                 networkInterfaces.delete(key(region, ni.getNetworkInterfaceId()));
+                releasePrivateIps(region, ni.getSubnetId(), ni.getPrivateIpAddresses().stream()
+                        .filter(ip -> !ip.isPrimary()).map(NetworkInterfacePrivateIpAddress::getPrivateIpAddress).toList());
                 continue;
             }
             ni.setAttachment(null);

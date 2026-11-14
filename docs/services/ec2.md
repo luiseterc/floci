@@ -1223,12 +1223,21 @@ profile.
 | Action | Description |
 |--------|-------------|
 | CreateNetworkInterface | Creates a standalone elastic network interface (ENI) in a subnet, unattached. |
+| AssignPrivateIpAddresses | Assigns explicit or count-allocated secondary IPv4 addresses to an ENI. |
+| UnassignPrivateIpAddresses | Removes secondary IPv4 addresses and returns allocator leases. |
 | DescribeNetworkInterfaces | Lists network interfaces known to the local EC2 service, both an instance's implicit primary interface and standalone ENIs created via `CreateNetworkInterface`. |
 | AttachNetworkInterface | Attaches an available standalone ENI to a running or stopped instance at a device index. |
 | DetachNetworkInterface | Detaches a standalone ENI by attachment ID, returning it to `available`. |
 | DeleteNetworkInterface | Deletes a standalone ENI. Fails while the ENI is still attached, matching AWS. |
 
 A standalone ENI created via `CreateNetworkInterface` can also be handed to `RunInstances` as an instance's primary interface (`NetworkInterface.1.NetworkInterfaceId` / `NetworkInterface.1.DeviceIndex`) instead of letting the instance create its own implicit one, the pattern Terraform's `aws_instance` resource uses for `network_interface { network_interface_id = ... }`. AWS only allows this for a single instance per launch call; `RunInstances` rejects it otherwise with `InvalidParameterCombination`.
+
+Secondary IPv4 assignment supports both standalone and launch-created ENIs, validates complete
+batches before updating stored interfaces, and enforces catalogued attached-instance address limits.
+Both address operations authorize the exact ENI with its current VPC and stored resource tags.
+IPv4 prefix delegation, reassignment of an address still held by another interface, and unassignment
+of an address associated with an Elastic IP return `UnsupportedOperation`; no guest Linux
+interface or address is materialized by these APIs.
 
 `ModifyNetworkInterfaceAttribute` is not implemented: no example in the corpus that needed `CreateNetworkInterface` was found to need it. A route table's `CreateRoute` with a `NetworkInterfaceId` target is accepted but not recorded, since `Route` does not yet model an ENI target; a subsequent `plan` against such a route may show drift.
 

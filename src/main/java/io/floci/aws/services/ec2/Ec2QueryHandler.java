@@ -344,6 +344,8 @@ public class Ec2QueryHandler {
                 // Network Interfaces
                 case "DescribeNetworkInterfaces" -> handleDescribeNetworkInterfaces(params, region);
                 case "CreateNetworkInterface" -> handleCreateNetworkInterface(params, region);
+                case "AssignPrivateIpAddresses" -> handleAssignPrivateIpAddresses(params, region);
+                case "UnassignPrivateIpAddresses" -> handleUnassignPrivateIpAddresses(params, region);
                 case "DeleteNetworkInterface" -> handleDeleteNetworkInterface(params, region);
                 case "AttachNetworkInterface" -> handleAttachNetworkInterface(params, region);
                 case "DetachNetworkInterface" -> handleDetachNetworkInterface(params, region);
@@ -5485,6 +5487,34 @@ public class Ec2QueryHandler {
         return xmlResponse(xml.build());
     }
 
+    private Response handleAssignPrivateIpAddresses(MultivaluedMap<String, String> p, String region) {
+        rejectIpv4Prefixes(p);
+        Integer count = p.getFirst("SecondaryPrivateIpAddressCount") == null ? null
+                : parseIntParam(p, "SecondaryPrivateIpAddressCount", 0);
+        List<String> assigned = service.assignPrivateIpAddresses(region, p.getFirst("NetworkInterfaceId"),
+                getList(p, "PrivateIpAddress"), count, Boolean.parseBoolean(p.getFirst("AllowReassignment")));
+        XmlBuilder xml = new XmlBuilder().start("AssignPrivateIpAddressesResponse", AwsNamespaces.EC2)
+                .elem("requestId", UUID.randomUUID().toString())
+                .elem("networkInterfaceId", p.getFirst("NetworkInterfaceId")).start("assignedPrivateIpAddressesSet");
+        for (String address : assigned) {
+            xml.start("item").elem("privateIpAddress", address).end("item");
+        }
+        xml.end("assignedPrivateIpAddressesSet").elem("return", true).end("AssignPrivateIpAddressesResponse");
+        return xmlResponse(xml.build());
+    }
+
+    private Response handleUnassignPrivateIpAddresses(MultivaluedMap<String, String> p, String region) {
+        rejectIpv4Prefixes(p);
+        service.unassignPrivateIpAddresses(region, p.getFirst("NetworkInterfaceId"), getList(p, "PrivateIpAddress"));
+        return booleanResponse("UnassignPrivateIpAddresses");
+    }
+
+    private static void rejectIpv4Prefixes(MultivaluedMap<String, String> p) {
+        if (p.keySet().stream().anyMatch(key -> key.equals("Ipv4PrefixCount") || key.startsWith("Ipv4Prefix."))) {
+            throw new AwsException("UnsupportedOperation", "IPv4 prefix delegation is not implemented", 400);
+        }
+    }
+
     private Response handleDeleteNetworkInterface(MultivaluedMap<String, String> p, String region) {
         service.deleteNetworkInterface(region, p.getFirst("NetworkInterfaceId"));
         return booleanResponse("DeleteNetworkInterface");
@@ -5610,9 +5640,17 @@ public class Ec2QueryHandler {
                     .elem("privateDnsName", eni.getPrivateDnsName())
                     .elem("primary", "true")
                     .raw(associationXml)
-                    .end("item")
-                    .end("privateIpAddressesSet")
                     .end("item");
+            for (NetworkInterfacePrivateIpAddress address : service.instanceInterfaceSecondaryAddresses(inst, eni)) {
+                xml.start("item").elem("privateIpAddress", address.getPrivateIpAddress())
+                        .elem("privateDnsName", address.getPrivateDnsName()).elem("primary", false);
+                if (address.getAssociation() != null) {
+                    xml.start("association").elem("publicIp", address.getAssociation().getPublicIp())
+                            .elem("ipOwnerId", address.getAssociation().getIpOwnerId()).end("association");
+                }
+                xml.end("item");
+            }
+            xml.end("privateIpAddressesSet").end("item");
         }
         xml.end("networkInterfaceSet");
         xml.elem("clientToken", inst.getClientToken());

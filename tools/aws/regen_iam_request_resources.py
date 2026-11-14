@@ -422,6 +422,8 @@ KNOWN_VARIABLES = {"Partition", "Region", "Account"}
 # type (`id_prefixes`). Other ids keep a wildcard entry until their coverage grows; requests without those lists stay
 # unchanged.
 ID_TARGETS = {"ec2": ("instance",)}
+# Scalar ENI operations whose request resource is read by the ordinary metadata rules.
+READ_IN_ID_TARGETS = {"ec2:AssignPrivateIpAddresses", "ec2:UnassignPrivateIpAddresses"}
 # An ARN format's account given as `${AccountId}`, the account `${Account}` gives in every other format.
 ACCOUNT_ID_SLOT_RE = re.compile(r"^(arn:[^:]*:[^:]*:[^:]*:)\$\{AccountId}:")
 VARIABLE_RE = re.compile(r"\$\{(\w+)}")
@@ -1713,7 +1715,7 @@ def entry_for(operation: str, upstream: dict, formats: dict[str, str], models: d
     arn_members = {member for member, values in patterns.items()
                    if (kind_of(member) == "identifier" or stem(member) in ("", "resource"))
                    and values and all(only_arn(value) for value in values)}
-    if namespace_of(operation) in ID_TARGETS:
+    if namespace_of(operation) in ID_TARGETS and operation not in READ_IN_ID_TARGETS:
         entry = {"action": upstream["action"], "types": types, "resources": []}
         targets = id_targets(operation, types, formats, models, known)
         if targets is not None:
