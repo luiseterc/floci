@@ -78,6 +78,11 @@ The CA key is created once and never rotates on its own. On the first start afte
 
 ### Custom Hostname Support
 
+With AWS endpoint spoofing enabled, generated certificates also cover EKS OIDC
+issuer hosts (`oidc.eks.<region>.<partition DNS suffix>`). Clients must trust
+Floci's CA and can keep TLS hostname verification enabled when discovering the
+issuer or retrieving its certificate for an IAM OIDC provider.
+
 If you set `FLOCI_HOSTNAME` or use a custom host in `FLOCI_BASE_URL`, the server certificate automatically includes those hostnames in its SANs. This is essential for Docker Compose setups where containers reference Floci by service name:
 
 ```yaml

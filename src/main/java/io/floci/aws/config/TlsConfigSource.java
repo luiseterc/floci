@@ -326,6 +326,8 @@ public class TlsConfigSource implements ConfigSource {
         }
         for (String region : AwsRegions.KNOWN_IDS.stream().sorted().toList()) {
             String suffix = AwsRegions.dnsSuffixFor(region);
+            // EKS advertises an issuer with two labels before the regional suffix.
+            sans.add("oidc.eks." + region + "." + suffix);
             // A wildcard matches exactly one label (RFC 6125 6.4.3), so the two broad
             // wildcards miss virtual-hosted addressing, where the bucket adds a label:
             // my-bucket.s3.<suffix> and my-bucket.s3.<region>.<suffix>. The DNS

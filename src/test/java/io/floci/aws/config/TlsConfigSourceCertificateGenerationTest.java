@@ -1,9 +1,13 @@
 package io.floci.aws.config;
 
+import io.floci.aws.core.common.Pem;
+import org.apache.http.conn.ssl.DefaultHostnameVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import javax.net.ssl.SSLException;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -306,6 +310,28 @@ class TlsConfigSourceCertificateGenerationTest {
             "Certificate SANs should cover dualstack virtual-hosted S3 endpoints");
         assertTrue(sans.contains("*.s3-control.us-east-1.amazonaws.com"),
             "Certificate SANs should cover S3 Control <account>.s3-control endpoints");
+    }
+
+    @Test
+    void certificateVerifiesEksOidcIssuersAcrossPartitionsOnlyWhenSpoofing() throws Exception {
+        System.setProperty("floci.dns.spoof-aws-endpoints", "true");
+        new TlsConfigSource();
+        X509Certificate certificate = Pem.parseCertificate(
+                Files.readString(tempDir.resolve("tls/floci-server.crt")));
+        DefaultHostnameVerifier verifier = new DefaultHostnameVerifier();
+        for (String host : List.of("oidc.eks.eu-west-1.amazonaws.com", "oidc.eks.us-gov-west-1.amazonaws.com",
+                "oidc.eks.cn-north-1.amazonaws.com.cn")) {
+            verifier.verify(host, certificate);
+        }
+        assertThrows(SSLException.class,
+                () -> verifier.verify("oidc.eks.cn-north-1.amazonaws.com", certificate));
+
+        System.setProperty("floci.dns.spoof-aws-endpoints", "false");
+        new TlsConfigSource();
+        X509Certificate withoutSpoofing = Pem.parseCertificate(
+                Files.readString(tempDir.resolve("tls/floci-server.crt")));
+        assertThrows(SSLException.class,
+                () -> verifier.verify("oidc.eks.eu-west-1.amazonaws.com", withoutSpoofing));
     }
 
     @Test
