@@ -83,6 +83,21 @@ class EksAddonServiceTest {
     }
 
     @Test
+    void createsPublishedEbsCsiVersionForKubernetes135() {
+        Fixture fixture = fixture();
+        fixture.cluster.setVersion("1.35");
+        CreateAddonRequest request = new CreateAddonRequest(
+                "aws-ebs-csi-driver", "v1.67.1-eksbuild.1", ROLE,
+                null, null, null, null, null);
+
+        Addon created = fixture.service.create(fixture.cluster, request);
+
+        assertEquals("v1.67.1-eksbuild.1", created.addonVersion());
+        assertEquals(ROLE, created.serviceAccountRoleArn());
+        assertEquals("ACTIVE", created.status());
+    }
+
+    @Test
     void createResolvesDefaultVersionWhenOmitted() {
         Fixture fixture = fixture();
         fixture.cluster.setVersion("1.29");
