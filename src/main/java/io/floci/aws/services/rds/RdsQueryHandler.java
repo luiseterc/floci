@@ -382,6 +382,8 @@ public class RdsQueryHandler {
 
         try {
             DbInstanceSettings settings = instanceSettings(params);
+            Integer promotionTier = parseIntegerParam(params, "PromotionTier");
+            RdsService.validatePromotionTier(promotionTier);
             List<String> vpcSecurityGroupIds = vpcSecurityGroupIds(params);
             Integer requestedPort = parseIntegerParam(params, "Port");
             DbInstance instance = service.createDbInstance(id, engine, engineVersion, masterUsername,
@@ -390,6 +392,9 @@ public class RdsQueryHandler {
                     manageMasterUserPassword, masterUserSecretKmsKeyId, tags, vpcSecurityGroupIds,
                     optionGroupName, region, autoMinorVersionUpgrade, settings, publiclyAccessible,
                     requestedPort, deletionProtection);
+            if (promotionTier != null) {
+                instance = service.setInstancePromotionTier(region, id, promotionTier);
+            }
             String result = dbInstanceXml(instance);
             return Response.ok(AwsQueryResponse.envelope("CreateDBInstance", AwsNamespaces.RDS, result)).build();
         } catch (AwsException e) {
@@ -924,6 +929,8 @@ public class RdsQueryHandler {
         }
         try {
             DbInstanceSettings settings = instanceSettings(params, false);
+            Integer promotionTier = parseIntegerParam(params, "PromotionTier");
+            RdsService.validatePromotionTier(promotionTier);
             DbInstanceScalingChanges scaling = scalingChanges(params);
             List<String> vpcSecurityGroupIds = vpcSecurityGroupIds(params);
             DbInstance instance = service.modifyDbInstance(
@@ -931,6 +938,9 @@ public class RdsQueryHandler {
                     vpcSecurityGroupIds, optionGroupName, region, autoMinorVersionUpgrade,
                     settings, publiclyAccessible, scaling, deletionProtection,
                     params.getFirst("DBParameterGroupName"));
+            if (promotionTier != null) {
+                instance = service.setInstancePromotionTier(region, id, promotionTier);
+            }
             String result = dbInstanceXml(instance);
             return Response.ok(AwsQueryResponse.envelope("ModifyDBInstance", AwsNamespaces.RDS, result)).build();
         } catch (AwsException e) {
@@ -1424,6 +1434,8 @@ public class RdsQueryHandler {
         }
 
         try {
+            Boolean copyTagsToSnapshot = parseOptionalBoolean(params, "CopyTagsToSnapshot");
+            List<String> exports = cloudwatchLogsExports(params);
             List<DbRoleAssociation> associatedRoles = parseAssociatedRoles(params);
             service.validateClusterRoleAssociations(id, engine, associatedRoles);
             boolean enableHttpEndpoint = Boolean.TRUE.equals(parseOptionalBoolean(params, "EnableHttpEndpoint"));
@@ -1489,6 +1501,9 @@ public class RdsQueryHandler {
             }
             if (backupRetentionPeriodParam != null) {
                 cluster = service.setBackupRetentionPeriod(region, id, backupRetentionPeriod);
+            }
+            if (copyTagsToSnapshot != null || exports != null) {
+                cluster = service.setClusterSnapshotAndLogSettings(region, id, copyTagsToSnapshot, exports, null);
             }
             String result = dbClusterXml(cluster);
             return Response.ok(AwsQueryResponse.envelope("CreateDBCluster", AwsNamespaces.RDS, result)).build();
@@ -1595,6 +1610,8 @@ public class RdsQueryHandler {
         Boolean manageMasterUserPassword = manageStr != null ? Boolean.parseBoolean(manageStr) : null;
         String masterUserSecretKmsKeyId = params.getFirst("MasterUserSecretKmsKeyId");
         try {
+            Boolean copyTagsToSnapshot = parseOptionalBoolean(params, "CopyTagsToSnapshot");
+            LogExportChanges exportChanges = cloudwatchLogsExportChanges(params);
             Double serverlessV2Min = parseDoubleParam(params, "ServerlessV2ScalingConfiguration.MinCapacity");
             Double serverlessV2Max = parseDoubleParam(params, "ServerlessV2ScalingConfiguration.MaxCapacity");
             Integer serverlessV2SecondsUntilAutoPause = parseIntegerParam(
@@ -1618,6 +1635,9 @@ public class RdsQueryHandler {
             }
             if (modifyBackupRetentionPeriod != null) {
                 cluster = service.setBackupRetentionPeriod(region, id, modifyBackupRetentionPeriod);
+            }
+            if (copyTagsToSnapshot != null || exportChanges != null) {
+                cluster = service.setClusterSnapshotAndLogSettings(region, id, copyTagsToSnapshot, null, exportChanges);
             }
             String result = dbClusterXml(cluster);
             return Response.ok(AwsQueryResponse.envelope("ModifyDBCluster", AwsNamespaces.RDS, result)).build();
@@ -3430,7 +3450,8 @@ public class RdsQueryHandler {
             xml.end("MasterUserSecret");
         }
         if (i.getDbClusterIdentifier() != null && !i.getDbClusterIdentifier().isBlank()) {
-            xml.elem("DBClusterIdentifier", i.getDbClusterIdentifier());
+            xml.elem("DBClusterIdentifier", i.getDbClusterIdentifier())
+                    .elem("PromotionTier", i.getPromotionTier());
         }
         xml.raw(readReplicaXml(i));
         writeAssociatedRoles(xml, i.getAssociatedRoles(), "DBInstanceRole");
@@ -3620,6 +3641,7 @@ public class RdsQueryHandler {
            .elem("MultiAZ", c.isMultiAz())
            .elem("StorageEncrypted", c.isStorageEncrypted())
            .elem("BackupRetentionPeriod", c.getBackupRetentionPeriod())
+           .elem("CopyTagsToSnapshot", c.isCopyTagsToSnapshot())
            .elem("KmsKeyId", c.getKmsKeyId())
            .elem("AvailabilityZone", c.getAvailabilityZone() != null ? c.getAvailabilityZone() : config.defaultAvailabilityZone())
            .elem("PreferredMaintenanceWindow", "mon:00:00-mon:03:00")
@@ -3662,6 +3684,11 @@ public class RdsQueryHandler {
         if (c.getGlobalClusterIdentifier() != null && !c.getGlobalClusterIdentifier().isBlank()) {
             xml.elem("GlobalClusterIdentifier", c.getGlobalClusterIdentifier());
         }
+        if (c.getEnabledCloudwatchLogsExports() != null && !c.getEnabledCloudwatchLogsExports().isEmpty()) {
+            xml.start("EnabledCloudwatchLogsExports");
+            c.getEnabledCloudwatchLogsExports().forEach(type -> xml.elem("member", type));
+            xml.end("EnabledCloudwatchLogsExports");
+        }
         xml.start("DBClusterMembers");
         if (c.getDbClusterMembers() != null) {
             String writer = c.resolveWriterIdentifier();
@@ -3669,6 +3696,7 @@ public class RdsQueryHandler {
                 xml.start("member")
                    .elem("DBInstanceIdentifier", memberId)
                    .elem("IsClusterWriter", memberId.equals(writer))
+                   .elem("PromotionTier", service.clusterMemberPromotionTier(c, memberId))
                    .end("member");
             }
         }
