@@ -15,6 +15,12 @@ import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.eks.EksClient;
+import software.amazon.awssdk.services.eks.model.EksException;
+import software.amazon.awssdk.services.eks.model.ResourceNotFoundException;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -31,6 +37,8 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * REST requests whose route no rule mapped to an IAM action were let through under enforcement
@@ -219,6 +227,33 @@ class IamRestRouteEnforcementIntegrationTest {
         refused(as(user, "eks").get(path).then(), "eks:DescribeNodegroup");
         policy(user, allow("eks:DescribeNodegroup", cluster.replace(":cluster/", ":nodegroup/") + "/ng/*"));
         as(user, "eks").get(path).then().statusCode(200).body("nodegroup.nodegroupArn", equalTo(nodegroup));
+    }
+
+    @Test
+    void deletedEksAddonRemainsAuthorizedForItsScopedDescribeWaiter() {
+        String name = "addon-waiter-" + suffix();
+        eksCluster(name);
+        String base = "/clusters/" + name + "/addons";
+        String arn = eks().body("{\"addonName\":\"vpc-cni\"}").post(base).then().statusCode(200)
+                .extract().path("addon.addonArn");
+        String user = "addon-waiter-user-" + suffix();
+        EnforcementFixtures.UserCredentials credentials = EnforcementFixtures.createUser(
+                cleanup, baseUri.getPort(), auth(ADMIN, "iam"), user);
+        policy(user, allow("eks:DescribeAddon", arn) + "," + allow("eks:DeleteAddon", arn));
+        try (EksClient client = EksClient.builder().endpointOverride(baseUri).region(Region.US_EAST_1)
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
+                        credentials.accessKeyId(), credentials.secretAccessKey()))).build()) {
+            assertEquals(arn, client.describeAddon(r -> r.clusterName(name).addonName("vpc-cni")).addon().addonArn());
+            client.deleteAddon(r -> r.clusterName(name).addonName("vpc-cni"));
+            assertThrows(ResourceNotFoundException.class,
+                    () -> client.describeAddon(r -> r.clusterName(name).addonName("vpc-cni")));
+            policy(user, allow("eks:DescribeAddon", arn + "-foreign"));
+            assertEquals(403, assertThrows(EksException.class,
+                    () -> client.describeAddon(r -> r.clusterName(name).addonName("vpc-cni"))).statusCode());
+            policy(user, allow("eks:DescribeAddon", "*") + "," + deny("eks:DescribeAddon", arn));
+            assertEquals(403, assertThrows(EksException.class,
+                    () -> client.describeAddon(r -> r.clusterName(name).addonName("vpc-cni"))).statusCode());
+        }
     }
 
     @Test

@@ -956,7 +956,7 @@ public class EksService implements TagHandler, ResourceProvider, Ec2InstanceLaun
      * cluster {@code clusterName} when {@code collection} is null, or else the node group, Fargate profile,
      * add-on, access entry or Pod Identity association {@code name} in that cluster, by the route's
      * collection segment, or for the update {@code name} the add-on it was made to. Empty when there is none,
-     * or the handler would refuse the lookup.
+     * or the handler would refuse the lookup. Deleted add-ons retain their ARN for scoped IAM deletion waiters.
      */
     public Optional<String> findResourceArn(String clusterName, String collection, String name) {
         Optional<Cluster> cluster = storage.get(requestClusterKey(clusterName));
@@ -967,7 +967,7 @@ public class EksService implements TagHandler, ResourceProvider, Ec2InstanceLaun
             return Optional.ofNullable(switch (collection) {
                 case "node-groups" -> describeNodeGroup(clusterName, name).getNodegroupArn();
                 case "fargate-profiles" -> describeFargateProfile(clusterName, name).getFargateProfileArn();
-                case "addons" -> addons.describe(cluster.get(), name).addonArn();
+                case "addons" -> addons.authorizationArn(cluster.get(), name).orElse(null);
                 case "access-entries" -> accessEntries.describe(cluster.get(), name).accessEntryArn();
                 case "pod-identity-associations" -> podIdentityAssociations.describe(cluster.get(), name).associationArn();
                 case "updates" -> {
