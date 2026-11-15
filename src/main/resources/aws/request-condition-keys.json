@@ -2,7 +2,7 @@
   "_source": {
     "generator": "tools/aws/regen_request_condition_keys.py",
     "reference": "https://servicereference.us-east-1.amazonaws.com/",
-    "botocore": "botocore 1.43.118 (installed package)",
+    "botocore": "--botocore-data /private/tmp/floci-vpc-test-venv/lib/python3.13/site-packages/botocore/data",
     "note": "make request-condition-keys-check re-derives members, their shapes and the protocols from botocore; make request-condition-keys-verify checks actions against AWS."
   },
   "actions": {
@@ -21,6 +21,105 @@
       "eks:authenticationMode",
       "eks:endpointPrivateAccess",
       "eks:endpointPublicAccess"
+    ],
+    "events:AllowVendedLogDeliveryForResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:CreateArchive": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:CreateEventBus": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:CreateEventSource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:CreateSubscriber": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DeleteEventBus": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DeleteEventSource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DeleteResourcePolicy": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DeleteRule": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DeleteSubscriber": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DescribeEventBus": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DescribeEventSource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DescribeRule": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DescribeSubscriber": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:DisableRule": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:EnableRule": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:GetResourcePolicy": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:ListResourcePolicies": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:ListTagsForResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:ListTargetsByRule": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:PutEvents": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:PutRawEvents": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:PutResourcePolicy": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:PutRule": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:PutTargets": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:RemoveTargets": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:RevokeResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:StartReplay": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:TagResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:UntagResource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:UpdateEventBus": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:UpdateEventSource": [
+      "aws:ResourceTag/${TagKey}"
+    ],
+    "events:UpdateSubscriber": [
+      "aws:ResourceTag/${TagKey}"
     ],
     "lambda:CreateWebFunction": [
       "lambda:Request/WebFunctionAuthType"
@@ -154,6 +253,7 @@
   },
   "protocols": {
     "eks": "rest-json",
+    "events": "json",
     "lambda": "rest-json",
     "redshift": "query",
     "route53": "rest-xml"

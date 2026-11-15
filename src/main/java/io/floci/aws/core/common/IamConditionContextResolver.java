@@ -14,6 +14,7 @@ import io.floci.aws.services.dynamodb.DynamoDbTableNames;
 import io.floci.aws.services.dynamodb.model.TableDefinition;
 import io.floci.aws.services.ec2.Ec2Service;
 import io.floci.aws.services.ec2.model.Tag;
+import io.floci.aws.services.eventbridge.EventBridgeService;
 import io.floci.aws.services.iam.IamActionRegistry;
 import io.floci.aws.services.iam.IamService;
 import io.floci.aws.services.iam.ResourceArnBuilder;
@@ -103,6 +104,7 @@ public class IamConditionContextResolver {
 
     private final Instance<DynamoDbFacade> dynamoDbFacade;
     private final Instance<Ec2Service> ec2Service;
+    private final Instance<EventBridgeService> eventBridgeService;
     private final Instance<S3Service> s3Service;
     private final Instance<CloudWatchLogsService> logsService;
     private final Instance<CloudWatchLogsCrossAccountService> crossAccountService;
@@ -129,13 +131,14 @@ public class IamConditionContextResolver {
                                        Instance<IamService> iamService,
                                        Instance<LambdaWebService> lambdaWebService,
                                        Instance<RequestConditionSpelling> requestConditionSpellings,
+                                       Instance<EventBridgeService> eventBridgeService,
                                        RequestContext requestContext,
                                        RegionResolver regionResolver,
                                        EmulatorConfig config,
                                        CurrentVertxRequest currentVertxRequest,
                                        ResolvedServiceCatalog serviceCatalog) {
         this(dynamoDbFacade, ec2Service, s3Service, logsService, crossAccountService, iamService,
-                lambdaWebService, requestConditionSpellings, requestContext, regionResolver,
+                lambdaWebService, requestConditionSpellings, eventBridgeService, requestContext, regionResolver,
                 config, currentVertxRequest, serviceCatalog, Clock.systemUTC());
     }
 
@@ -147,6 +150,7 @@ public class IamConditionContextResolver {
                                 Instance<IamService> iamService,
                                 Instance<LambdaWebService> lambdaWebService,
                                 Instance<RequestConditionSpelling> requestConditionSpellings,
+                                Instance<EventBridgeService> eventBridgeService,
                                 RequestContext requestContext,
                                 RegionResolver regionResolver,
                                 EmulatorConfig config,
@@ -154,6 +158,7 @@ public class IamConditionContextResolver {
                                 ResolvedServiceCatalog serviceCatalog, Clock clock) {
         this.dynamoDbFacade = dynamoDbFacade;
         this.ec2Service = ec2Service;
+        this.eventBridgeService = eventBridgeService;
         this.s3Service = s3Service;
         this.logsService = logsService;
         this.crossAccountService = crossAccountService;
@@ -992,6 +997,39 @@ public class IamConditionContextResolver {
         if (!keys.isEmpty()) {
             putResourceKeys(result, region, parts[0],
                     ec2Service.get().heldResources(region, parts[0], List.of(parts[1])).get(parts[1]));
+        }
+        return result;
+    }
+
+    /** EventBridge evaluates stored target tags, never caller-supplied tags or another resource's tags. */
+    public Map<String, List<String>> withEventBridgeResourceContext(String action, String resource,
+                                                                 String region,
+                                                                 Map<String, List<String>> context) {
+        if (!RequestConditionKeys.takes(action, "aws:ResourceTag/${TagKey}") || !eventBridgeService.isResolvable()
+                || !AwsArnUtils.isArn(resource)) {
+            return context;
+        }
+        AwsArnUtils.Arn arn = AwsArnUtils.parse(resource);
+        if (!"events".equals(arn.service()) || !(arn.resource().startsWith("event-bus/")
+                || arn.resource().startsWith("rule/") || arn.resource().startsWith("archive/"))) {
+            return context;
+        }
+        Map<String, List<String>> result = context == null ? new LinkedHashMap<>() : new LinkedHashMap<>(context);
+        result.keySet().removeIf(key -> key.regionMatches(true, 0, RESOURCE_TAG_PREFIX, 0, RESOURCE_TAG_PREFIX.length()));
+        try {
+            // The service validates partition, account and Region before looking up the resource.
+            eventBridgeService.get().listTagsForResource(resource, region)
+                    .forEach((key, value) -> {
+                        String contextKey = RESOURCE_TAG_PREFIX + key;
+                        String existingKey = result.keySet().stream()
+                                .filter(candidate -> candidate.equalsIgnoreCase(contextKey)).findFirst().orElse(contextKey);
+                        result.computeIfAbsent(existingKey, ignored -> new ArrayList<>()).add(value);
+                    });
+        } catch (AwsException expected) {
+            if (!"ResourceNotFoundException".equals(expected.getErrorCode())) {
+                throw expected;
+            }
+            // An absent or foreign resource has no stored tags for this authorization target.
         }
         return result;
     }

@@ -75,6 +75,12 @@ FLAT_PROTOCOLS = ("query", "ec2")
 # carries it, each key read from the stored resource, and the actions that take a key their request does not
 # carry, with the reason.
 SERVICES = {
+    "events": {
+        "model": "events",
+        "request": {},
+        "stored": ("aws:ResourceTag/${TagKey}",),
+        "not_in_request": {},
+    },
     "eks": {
         "model": "eks",
         "request": {
