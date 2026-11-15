@@ -690,6 +690,53 @@ class Ec2NetworkInterfaceIntegrationTest {
         return out;
     }
 
+    @Test
+    @Order(40)
+    void automaticSecondaryCountIsReturnedAndPersistedWithOnePrimary() {
+        String id = createWithList("SecondaryPrivateIpAddressCount", "2")
+                .statusCode(200)
+                .extract().path("CreateNetworkInterfaceResponse.networkInterface.networkInterfaceId");
+        try {
+            Map<String, Boolean> addresses = describedAddresses(id);
+            Assertions.assertEquals(3, addresses.size());
+            Assertions.assertEquals(1L, addresses.values().stream().filter(Boolean::booleanValue).count());
+        } finally {
+            deleteEni(id);
+        }
+    }
+
+    @Test
+    @Order(41)
+    void automaticSecondariesAllowExplicitPrimaryAndRejectInvalidCountsAndCombinations() {
+        String primary = addressInSubnet(220);
+        String id = createWithList("PrivateIpAddresses.1.PrivateIpAddress", primary,
+                "PrivateIpAddresses.1.Primary", "true", "SecondaryPrivateIpAddressCount", "2")
+                .statusCode(200)
+                .body("CreateNetworkInterfaceResponse.networkInterface.privateIpAddressesSet.item.size()", equalTo(3))
+                .extract().path("CreateNetworkInterfaceResponse.networkInterface.networkInterfaceId");
+        try {
+            Map<String, Boolean> addresses = describedAddresses(id);
+            Assertions.assertEquals(3, addresses.size());
+            Assertions.assertEquals(Boolean.TRUE, addresses.get(primary));
+        } finally {
+            deleteEni(id);
+        }
+        for (String count : List.of("-1", "not-an-integer")) {
+            createWithList("SecondaryPrivateIpAddressCount", count).statusCode(400)
+                    .body("Response.Errors.Error.Code", equalTo("InvalidParameterValue"));
+        }
+        createWithList("PrivateIpAddresses.1.PrivateIpAddress", primary,
+                "PrivateIpAddresses.1.Primary", "false", "SecondaryPrivateIpAddressCount", "2")
+                .statusCode(400).body("Response.Errors.Error.Code", equalTo("InvalidParameterCombination"));
+        String zero = createWithList("SecondaryPrivateIpAddressCount", "0").statusCode(200)
+                .extract().path("CreateNetworkInterfaceResponse.networkInterface.networkInterfaceId");
+        try {
+            Assertions.assertEquals(1, describedAddresses(zero).size());
+        } finally {
+            deleteEni(zero);
+        }
+    }
+
     private static void deleteEni(String id) {
         given().formParam("Action", "DeleteNetworkInterface").formParam("NetworkInterfaceId", id)
             .header("Authorization", AUTH_HEADER).when().post("/").then().statusCode(200);

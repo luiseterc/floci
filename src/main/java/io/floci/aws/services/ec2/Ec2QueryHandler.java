@@ -5522,7 +5522,8 @@ public class Ec2QueryHandler {
         List<Tag> tagList = parseTagsForResource(p, "network-interface");
 
         NetworkInterface ni = service.createNetworkInterface(region, subnetId, description,
-                privateIpAddress, privateIpAddresses, securityGroupIds, tagList);
+                privateIpAddress, privateIpAddresses, securityGroupIds, tagList,
+                intParam(p, "SecondaryPrivateIpAddressCount"));
 
         XmlBuilder xml = new XmlBuilder()
                 .start("CreateNetworkInterfaceResponse", AwsNamespaces.EC2)

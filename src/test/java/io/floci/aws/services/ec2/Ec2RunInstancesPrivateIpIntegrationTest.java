@@ -206,6 +206,28 @@ class Ec2RunInstancesPrivateIpIntegrationTest {
         delete(owner, network);
     }
 
+    @Test
+    void secondaryCountExhaustionLeavesNoInterfaceAndDeletionReleasesEveryAddress() {
+        String owner = Long.toString(ACCOUNTS.incrementAndGet());
+        Network network = createSubnet(owner, "10.61.0.0/16", "10.61.1.0/28");
+        // A /28 has eleven assignable addresses after EC2's five reservations.
+        request("CreateNetworkInterface", owner).formParam("SubnetId", network.subnetId())
+                .formParam("SecondaryPrivateIpAddressCount", 11).post("/").then().statusCode(400)
+                .body("Response.Errors.Error.Code", equalTo("InsufficientFreeAddressesInSubnet"));
+        request("DescribeNetworkInterfaces", owner).formParam("Filter.1.Name", "subnet-id")
+                .formParam("Filter.1.Value.1", network.subnetId()).post("/").then().statusCode(200)
+                .body("DescribeNetworkInterfacesResponse.networkInterfaceSet.item.size()", equalTo(0));
+        for (int attempt = 0; attempt < 2; attempt++) {
+            String id = request("CreateNetworkInterface", owner).formParam("SubnetId", network.subnetId())
+                    .formParam("SecondaryPrivateIpAddressCount", 10).post("/").then().statusCode(200)
+                    .body("CreateNetworkInterfaceResponse.networkInterface.privateIpAddressesSet.item.size()", equalTo(11))
+                    .extract().path("CreateNetworkInterfaceResponse.networkInterface.networkInterfaceId");
+            request("DeleteNetworkInterface", owner).formParam("NetworkInterfaceId", id)
+                    .post("/").then().statusCode(200);
+        }
+        delete(owner, network);
+    }
+
     private record Network(String vpcId, String subnetId) {}
 
     private static RequestSpecification runInstance(String owner) {
