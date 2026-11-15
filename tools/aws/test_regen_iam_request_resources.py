@@ -371,6 +371,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(r, "HAND_BUILT", ("hand",))
     monkeypatch.setattr(r, "NOT_COVERED", {"later": "a later batch"})
     monkeypatch.setattr(r, "READ_IN_HAND_BUILT", {})
+    monkeypatch.setattr(r, "RESOURCE_TAGS_ONLY", ())
     monkeypatch.setattr(r, "MEASURED", {})
     monkeypatch.setattr(r, "FORWARDED", {})
     return monkeypatch
@@ -2110,3 +2111,20 @@ def test_eip_operations_read_scalar_targets_from_models(operation, members, kind
     action = "ec2:" + operation
     entry = r.entry_for(action, {"action": action, "types": kinds}, formats, {"ec2": ec2})
     assert entry["resources"] == [{"type": kind, "fill": {variables[kind]: variables[kind]}} for kind in kinds]
+
+
+def test_stored_tag_metadata_preserves_hand_built_operation_resource_builders(isolated, tmp_path):
+    isolated.setattr(r, "RESOURCE_TAGS_ONLY", ("hand",))
+    resource = "arn:${Partition}:hand:${Region}:${Account}:${QueueName}"
+    hand = reference("hand", {"SetAttributes": ["queue"]}, {"queue": resource})
+    hand["Resources"][0]["ConditionKeys"] = ["aws:ResourceTag/${TagKey}"]
+    write_models(tmp_path, {"svc": model({"GetThing": {"ThingName": "String"}, "ListThings": {}})})
+    document = r.build([*DOCUMENTS, hand], "test", tmp_path, "botocore test")
+    assert document["namespaces"]["hand"] == []
+    assert document["arnFormats"]["hand"] == {"queue": resource}
+    assert document["resourceTagKeys"]["hand"] == {"queue": ["aws:ResourceTag/"]}
+    assert not r.reads("hand:SetAttributes")
+    assert "hand:SetAttributes" not in document["operations"]
+    assert r.validate(document) == []
+    assert r.derive(document, tmp_path) == []
+    assert r.verify_against(document, r.checked_actions([*DOCUMENTS, hand]), document["arnFormats"]) == ([], [])

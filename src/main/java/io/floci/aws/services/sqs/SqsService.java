@@ -20,6 +20,7 @@ import io.floci.aws.core.common.Pagination;
 import io.floci.aws.core.common.RegionResolver;
 import io.floci.aws.core.common.RequestContext;
 import io.floci.aws.core.common.Resettable;
+import io.floci.aws.core.common.StoredResourceArns;
 import io.floci.aws.core.resource.ExplorerResource;
 import io.floci.aws.core.resource.ResourceProvider;
 import io.floci.aws.core.resource.SupportedResourceType;
@@ -63,7 +64,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class SqsService implements Resettable, ResourceProvider {
+public class SqsService implements Resettable, ResourceProvider, StoredResourceArns {
 
     private static final Logger LOG = Logger.getLogger(SqsService.class);
     private static final int DEDUP_WINDOW_SECONDS = 300; // 5 minutes
@@ -2251,6 +2252,34 @@ public class SqsService implements Resettable, ResourceProvider {
             arr.add(singleStatement);
         }
         return arr;
+    }
+
+    @Override
+    public String namespace() {
+        return "sqs";
+    }
+
+    /** SQS keeps its existing QueueUrl resource builder; only stored tags use this interface. */
+    @Override
+    public Optional<String> find(String type, List<String> names, String region) {
+        return Optional.empty();
+    }
+
+    /** Tags of the queue in the ARN's exact account, Region and partition, without mutating its record. */
+    @Override
+    public Map<String, String> storedTags(String resourceArn) {
+        if (!AwsArnUtils.isArnFor(resourceArn, "sqs")) {
+            return Map.of();
+        }
+        AwsArnUtils.Arn arn = AwsArnUtils.parse(resourceArn);
+        if (!regionResolver.partitionForRegion(arn.region()).equals(arn.partition())) {
+            return Map.of();
+        }
+        String queueUrl = "sqs://queue/" + arn.accountId() + "/" + arn.resource();
+        return getQueueByUrl(regionKey(arn.region(), queueUrl), queueUrl)
+                .filter(queue -> resourceArn.equals(queueArn(queue.getQueueUrl(), arn.partition(),
+                        arn.region(), regionResolver.getAccountId())))
+                .map(Queue::getTags).map(LinkedHashMap::new).orElseGet(LinkedHashMap::new);
     }
 
     public Map<String, String> listQueueTags(String queueUrl, String region) {
