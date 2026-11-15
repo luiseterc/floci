@@ -257,6 +257,24 @@ class IamRestRouteEnforcementIntegrationTest {
     }
 
     @Test
+    void deletedEksFargateProfileRemainsAuthorizedForItsScopedDescribeWaiter() {
+        String name = "fargate-waiter-" + suffix();
+        eksCluster(name);
+        String path = "/clusters/" + name + "/fargate-profiles";
+        String arn = eks().body("{\"fargateProfileName\":\"fp\",\"podExecutionRoleArn\":\"arn:aws:iam::"
+                + ACCOUNT + ":role/route-fargate\"}").post(path).then().statusCode(200)
+                .extract().path("fargateProfile.fargateProfileArn");
+        String user = user("fargate-waiter");
+        policy(user, allow("eks:DescribeFargateProfile", arn) + "," + allow("eks:DeleteFargateProfile", arn));
+        as(user, "eks").delete(path + "/fp").then().statusCode(200);
+        as(user, "eks").get(path + "/fp").then().statusCode(404);
+        policy(user, allow("eks:DescribeFargateProfile", arn + "-foreign"));
+        refused(as(user, "eks").get(path + "/fp").then(), "eks:DescribeFargateProfile");
+        policy(user, allow("eks:DescribeFargateProfile", "*") + "," + deny("eks:DescribeFargateProfile", arn));
+        refused(as(user, "eks").get(path + "/fp").then(), "eks:DescribeFargateProfile");
+    }
+
+    @Test
     void eachResourceAnEksClusterHoldsIsCheckedAgainstTheArnEksHoldsItUnder() {
         // Each is looked up as EKS looks it up, so a Deny on its own ARN applies where the action is allowed
         // on every resource, and a grant on that ARN alone covers it.
