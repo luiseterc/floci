@@ -2275,8 +2275,7 @@ public class SqsService implements Resettable, ResourceProvider, StoredResourceA
         if (!regionResolver.partitionForRegion(arn.region()).equals(arn.partition())) {
             return Map.of();
         }
-        String queueUrl = "sqs://queue/" + arn.accountId() + "/" + arn.resource();
-        return getQueueByUrl(regionKey(arn.region(), queueUrl), queueUrl)
+        return findQueueByArn(arn)
                 .filter(queue -> resourceArn.equals(queueArn(queue.getQueueUrl(), arn.partition(),
                         arn.region(), regionResolver.getAccountId())))
                 .map(Queue::getTags).map(LinkedHashMap::new).orElseGet(LinkedHashMap::new);
@@ -2359,11 +2358,14 @@ public class SqsService implements Resettable, ResourceProvider, StoredResourceA
      * Region whichever account the caller is in. Empty when the queue does not exist or has no policy.
      */
     public Optional<String> findQueuePolicy(String queueArn) {
-        AwsArnUtils.Arn arn = AwsArnUtils.parse(queueArn);
-        String queueUrl = "sqs://queue/" + arn.accountId() + "/" + arn.resource();
-        return getQueueByUrl(regionKey(arn.region(), queueUrl), queueUrl)
+        return findQueueByArn(AwsArnUtils.parse(queueArn))
                 .map(queue -> queue.getAttributes().get("Policy"))
                 .filter(policy -> !policy.isBlank());
+    }
+
+    private Optional<Queue> findQueueByArn(AwsArnUtils.Arn arn) {
+        String queueUrl = "sqs://queue/" + arn.accountId() + "/" + arn.resource();
+        return getQueueByUrl(regionKey(arn.region(), queueUrl), queueUrl);
     }
 
     private String regionKey(String region, String queueUrl) {
