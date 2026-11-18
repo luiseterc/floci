@@ -116,6 +116,8 @@ which the condition resolver fills with the tags the type's service holds on the
 id-list namespaces, `resourceKeys` the type's other condition keys that name a member of its botocore shape (`ec2:Vpc` a network
 interface's `VpcId`), which its service answers from the resource it holds, as an ARN where the reference types the
 key as one.
+`RESOURCE_TAGS_ONLY` reads ARN formats and resource-tag keys for hand-built namespaces without
+replacing any operation resource builder (SQS keeps its QueueUrl parser).
 Beyond the members' names, botocore's shapes and documentation say what a member names, and the rule reads them:
 - a member whose documentation names the type, word for word ("The name of the pipeline to start"), fills its
   variable when it is the kind the variable is (a name, an id), and is found by the type's service otherwise
@@ -298,6 +300,9 @@ NAMESPACES = ("access-analyzer", "account", "acm", "application-autoscaling", "a
 # The namespaces whose resources ResourceArnBuilder builds itself.
 HAND_BUILT = ("apigateway", "bedrock", "dsql", "dynamodb", "eks", "iam", "kinesis", "kms", "logs", "pipes",
               "resource-groups", "s3", "sns", "sqs", "sts")
+
+# Read ARN formats and stored-tag keys without replacing hand-built operation resource builders.
+RESOURCE_TAGS_ONLY = ("sqs",)
 
 # Operations of a namespace in `HAND_BUILT` read from the reference all the same, each with its reason.
 _LOGS_DELIVERY = ("CloudWatch Logs vended-log delivery: its requests name a delivery source, destination or delivery "
@@ -3203,7 +3208,7 @@ def build(documents: list[dict], provenance: str, data: Path, botocore: str) -> 
     upstream = with_rest_operations(checked_actions(documents), documents, rest_operations(data))
     covered = {operation: value for operation, value in upstream.items() if reads(operation)}
     _check_overrides(covered)
-    read_namespaces = set(NAMESPACES) | {namespace_of(operation) for operation in covered}
+    read_namespaces = set(NAMESPACES) | set(RESOURCE_TAGS_ONLY) | {namespace_of(operation) for operation in covered}
     namespaces = {namespace: sorted({client for operation, value in covered.items()
                                      if namespace_of(operation) == namespace for client in value["clients"]})
                   for namespace in sorted(read_namespaces)}
@@ -3402,6 +3407,8 @@ def _check_overrides(covered: dict[str, dict]) -> None:
               if operation in READ_IN_HAND_BUILT]
     stale += [f"READ_IN_HAND_BUILT names {operation}, outside HAND_BUILT" for operation in READ_IN_HAND_BUILT
               if namespace_of(operation) not in HAND_BUILT]
+    stale += [f"RESOURCE_TAGS_ONLY names {namespace}, outside HAND_BUILT" for namespace in RESOURCE_TAGS_ONLY
+              if namespace not in HAND_BUILT]
     for left, right in (("NAMESPACES", "HAND_BUILT"), ("NAMESPACES", "NOT_COVERED"), ("HAND_BUILT", "NOT_COVERED")):
         stale += [f"{namespace} is in both {left} and {right}"
                   for namespace in sorted(set(globals()[left]) & set(globals()[right]))]

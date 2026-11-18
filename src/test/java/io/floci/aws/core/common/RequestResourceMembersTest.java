@@ -164,7 +164,7 @@ class RequestResourceMembersTest {
         assertTrue(table.namespaces().containsAll(List.of("cognito-idp", "ecr", "elasticloadbalancing", "states")));
         assertTrue(table.namespaces().contains("lambda"));
         assertFalse(table.handBuilt().contains("lambda"));
-        assertEquals(Set.of("dynamodb", "logs"), table.namespaces().stream().filter(table.handBuilt()::contains)
+        assertEquals(Set.of("dynamodb", "logs", "sqs"), table.namespaces().stream().filter(table.handBuilt()::contains)
                 .collect(Collectors.toSet()));
         Set<String> logsDelivery = Stream.of("PutDeliverySource", "GetDeliverySource", "DeleteDeliverySource",
                 "DescribeDeliverySources", "PutDeliveryDestination", "GetDeliveryDestination",

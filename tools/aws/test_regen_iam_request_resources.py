@@ -371,6 +371,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(r, "HAND_BUILT", ("hand",))
     monkeypatch.setattr(r, "NOT_COVERED", {"later": "a later batch"})
     monkeypatch.setattr(r, "READ_IN_HAND_BUILT", {})
+    monkeypatch.setattr(r, "RESOURCE_TAGS_ONLY", ())
     monkeypatch.setattr(r, "MEASURED", {})
     monkeypatch.setattr(r, "STATEMENT_SOURCES", {})
     return monkeypatch
@@ -2685,3 +2686,20 @@ def test_a_name_for_a_new_resource_does_not_select_an_existing_id():
     models = cluster_model("CreateWidget", {"WidgetName": "<p>A name for the widget.</p>"})
     resource = {"type": "widget", "fill": {}}
     assert r.with_documented("svc:CreateWidget", ["widget"], formats, models, [resource]) == [resource]
+
+
+def test_stored_tag_metadata_preserves_hand_built_operation_resource_builders(isolated, tmp_path):
+    isolated.setattr(r, "RESOURCE_TAGS_ONLY", ("hand",))
+    resource = "arn:${Partition}:hand:${Region}:${Account}:${QueueName}"
+    hand = reference("hand", {"SetAttributes": ["queue"]}, {"queue": resource})
+    hand["Resources"][0]["ConditionKeys"] = ["aws:ResourceTag/${TagKey}"]
+    write_models(tmp_path, {"svc": model({"GetThing": {"ThingName": "String"}, "ListThings": {}})})
+    document = r.build([*DOCUMENTS, hand], "test", tmp_path, "botocore test")
+    assert document["namespaces"]["hand"] == []
+    assert document["arnFormats"]["hand"] == {"queue": resource}
+    assert document["resourceTagKeys"]["hand"] == {"queue": ["aws:ResourceTag/"]}
+    assert not r.reads("hand:SetAttributes")
+    assert "hand:SetAttributes" not in document["operations"]
+    assert r.validate(document) == []
+    assert r.derive(document, tmp_path) == []
+    assert r.verify_against(document, r.checked_actions([*DOCUMENTS, hand]), document["arnFormats"]) == ([], [])
